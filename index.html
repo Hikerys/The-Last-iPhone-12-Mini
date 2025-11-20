@@ -1,0 +1,1838 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Last iPhone 12 Mini</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background-color: #050505;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        canvas { 
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        #ui-layer, #menu-layer, #dialogue-layer, #touch-layer {
+            position: absolute;
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .hud {
+            position: absolute;
+            top: 20px; 
+            left: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000;
+            display: flex; 
+            gap: 20px;
+            pointer-events: none;
+            flex-wrap: wrap;
+            z-index: 10;
+        }
+        
+        #boss-ui {
+            position: absolute;
+            top: 60px; 
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%; 
+            max-width: 600px; 
+            text-align: center;
+            display: none;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .boss-bar-bg { 
+            width: 100%; 
+            height: 15px; 
+            background: #333; 
+            border: 2px solid white; 
+            margin-top: 5px; 
+        }
+        
+        .boss-bar-fill { 
+            width: 100%; 
+            height: 100%; 
+            background: #e74c3c; 
+            transition: width 0.1s; 
+        }
+
+        #interact-prompt {
+            position: absolute;
+            background: rgba(0,0,0,0.9);
+            border: 2px solid #0f0;
+            color: #0f0;
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 18px;
+            font-weight: bold;
+            display: none;
+            z-index: 50;
+            transform: translate(-50%, -100%); 
+            text-align: center;
+            pointer-events: none;
+        }
+
+        #dialogue-box {
+            position: absolute;
+            bottom: 0; 
+            width: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            border-top: 4px solid #3498db;
+            padding: 20px;
+            text-align: center;
+            pointer-events: auto;
+            display: none;
+            z-index: 60;
+        }
+        
+        .char-name { 
+            color: #3498db; 
+            font-size: 20px; 
+            font-weight: bold; 
+            margin-bottom: 5px; 
+            display: block; 
+            text-transform: uppercase; 
+        }
+        
+        .dialogue-text { 
+            font-size: 18px; 
+            margin-bottom: 15px; 
+            line-height: 1.4; 
+            max-width: 800px; 
+            margin-left: auto; 
+            margin-right: auto; 
+            font-style: italic; 
+        }
+        
+        .btn { 
+            background: white; 
+            color: black; 
+            border: none; 
+            padding: 10px 30px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            font-weight: bold; 
+            text-transform: uppercase;
+            border-radius: 8px; 
+            transition: background 0.2s;
+        }
+        
+        .btn:active { 
+            background: #ccc; 
+        }
+        
+        #touch-layer {
+            display: none; 
+            z-index: 70;
+        }
+        
+        #touch-layer.active {
+            display: block;
+            pointer-events: auto;
+        }
+        
+        .touch-btn {
+            width: 70px; 
+            height: 70px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 15px;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            align-items: center; 
+            justify-content: center;
+            pointer-events: auto;
+            font-size: 24px;
+            touch-action: none;
+            transition: all 0.1s;
+            user-select: none;
+        }
+        
+        .touch-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: #fff;
+            transform: scale(0.9);
+        }
+
+        #joystick-area {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 170px; 
+            height: 170px;
+            pointer-events: auto;
+            touch-action: none; 
+        }
+        
+        #joystick-base {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            opacity: 0.7;
+        }
+        
+        #joystick-thumb {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); 
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border: 2px solid white;
+            border-radius: 50%;
+            transition: transform 0.05s ease-out;
+        }
+        
+        #mobile-controls-right {
+            position: absolute;
+            bottom: 30px; 
+            right: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            pointer-events: auto;
+        }
+        
+        #btn-attack-mobile { 
+            border-radius: 50%; 
+            width: 90px; 
+            height: 90px; 
+            font-size: 32px; 
+            background: rgba(231, 76, 60, 0.3); 
+            border-color: #e74c3c;
+        }
+        
+        #btn-attack-mobile:active {
+            background: rgba(231, 76, 60, 0.6);
+        }
+        
+        #btn-interact-mobile { 
+            border-radius: 50%; 
+            width: 60px; 
+            height: 60px; 
+            font-size: 20px; 
+            background: rgba(0, 255, 0, 0.3); 
+            border-color: lime;
+        }
+        
+        #btn-interact-mobile:active {
+            background: rgba(0, 255, 0, 0.6);
+        }
+
+        #menu-layer {
+            background: #050505;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 1;
+            transition: opacity 0.3s;
+            pointer-events: auto;
+        }
+        
+        #menu-layer.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .menu-title { 
+            font-size: 40px; 
+            margin-bottom: 10px; 
+            text-transform: uppercase; 
+            text-align: center; 
+            text-shadow: 0 0 20px cyan; 
+        }
+        
+        .diff-container { 
+            display: flex; 
+            gap: 10px; 
+            margin-bottom: 20px; 
+            flex-wrap: wrap; 
+            justify-content: center; 
+        }
+        
+        .diff-btn {
+            background: transparent; 
+            border: 1px solid #555; 
+            color: #777;
+            padding: 10px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 14px;
+            min-width: 100px; 
+            text-align: center; 
+            border-radius: 5px;
+            transition: all 0.2s;
+        }
+        
+        .diff-btn:hover {
+            border-color: #888;
+            color: #aaa;
+        }
+        
+        .diff-btn.active { 
+            border: 2px solid white; 
+            color: white; 
+            background: rgba(255,255,255,0.1); 
+        }
+        
+        .menu-btn {
+            background: transparent; 
+            border: 2px solid white; 
+            color: white;
+            padding: 15px 20px; 
+            font-size: 20px; 
+            margin: 8px; 
+            cursor: pointer;
+            width: 300px; 
+            transition: all 0.2s;
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            border-radius: 10px;
+        }
+        
+        .menu-btn:hover { 
+            background: white; 
+            color: black; 
+            transform: scale(1.05); 
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<div id="interact-prompt">E</div>
+
+<div id="touch-layer">
+    <div id="joystick-area">
+        <div id="joystick-base">
+            <div id="joystick-thumb"></div>
+        </div>
+    </div>
+
+    <div id="mobile-controls-right">
+        <div id="btn-attack-mobile" class="touch-btn">⚔️</div>
+        <div id="btn-interact-mobile" class="touch-btn">E</div>
+    </div>
+</div>
+
+<div id="ui-layer" style="display: none;">
+    <div class="hud" id="main-hud">
+        <div id="hp-display">HP: ❤️❤️❤️</div>
+        <div id="ammo-display" style="display:none;">BATTERY: 100%</div>
+        <div id="score-display" style="display:none;">KILLS: 0</div>
+    </div>
+    <div id="boss-ui">
+        <span style="font-size: 20px; font-weight: bold;">ТИМ КУК</span>
+        <div class="boss-bar-bg"><div id="boss-hp" class="boss-bar-fill"></div></div>
+    </div>
+</div>
+
+<div id="dialogue-layer">
+    <div id="dialogue-box">
+        <span id="d-char" class="char-name">ИМЯ</span>
+        <div id="d-text" class="dialogue-text">...</div>
+        <button class="btn" id="dialogue-btn">ДАЛЕЕ</button>
+    </div>
+</div>
+
+<div id="menu-layer">
+    <img id="menu-logo-img" src="картинки/menu.png" style="max-width: 120px; margin-bottom: 10px; display: none;" onerror="this.style.display='none'">
+    <div style="font-size: 60px; margin-bottom: 10px;" id="menu-logo-fallback">📱</div>
+    <div class="menu-title">The Last<br>iPhone 12 Mini</div>
+    
+    <div style="margin-bottom: 10px; color: #aaa; font-size: 16px;">ВЫБЕРИТЕ СЛОЖНОСТЬ:</div>
+    <div class="diff-container">
+        <button class="diff-btn" id="btn-easy-menu">ЛЕГКАЯ (5 HP)</button>
+        <button class="diff-btn active" id="btn-normal-menu">СРЕДНЯЯ (3 HP)</button>
+        <button class="diff-btn" id="btn-hard-menu">ХАРДКОР (1 HP)</button>
+    </div>
+
+    <button class="menu-btn" id="btn-story">СЮЖЕТ</button>
+    <button class="menu-btn" id="btn-infinity">БЕСКОНЕЧНОСТЬ</button>
+</div>
+
+<script>
+'use strict';
+
+// === PARTICLE SYSTEM ===
+class Particle {
+    constructor(x, y, vx, vy, color, life) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.color = color;
+        this.life = life;
+        this.maxLife = life;
+        this.size = 3 + Math.random() * 3;
+    }
+    
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.2;
+        this.life--;
+        this.vx *= 0.98;
+        this.vy *= 0.98;
+    }
+    
+    draw(ctx) {
+        const alpha = this.life / this.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// === ASSETS ===
+const Assets = {
+    images: {},
+    list: {
+        hero: 'картинки/yska69.png',
+        menu: 'картинки/menu.png',
+        phone: 'картинки/iphone12mini.png',
+        scooter: 'картинки/electric_scooter.png',
+        office: 'картинки/Apple_office.png',
+        tim: 'картинки/Tim_Cook.png',
+        car: 'картинки/Apple_car.png',
+        ally: 'картинки/1049.png',
+        heart: 'картинки/heart.png',
+        p_17pro: 'картинки/iPhone17Pro.png',
+        p_17: 'картинки/iPhone17.png',
+        p_air: 'картинки/iPhoneAir.png',
+        p_16e: 'картинки/iPhone16e.png',
+        dns_logo: 'картинки/dns_logo.png'
+    },
+    techtokers: [],
+    
+    loadAll: function() {
+        for (let key in this.list) {
+            let img = new Image();
+            img.src = this.list[key];
+            this.images[key] = img;
+        }
+        
+        for (let i = 1; i <= 10; i++) {
+            let img = new Image();
+            img.src = `картинки/techtoker_${i}.png`;
+            this.techtokers.push(img);
+        }
+        
+        let menuImg = new Image();
+        menuImg.src = 'картинки/menu.png';
+        menuImg.onload = function() {
+            const logoEl = document.getElementById('menu-logo-img');
+            const fallbackEl = document.getElementById('menu-logo-fallback');
+            if (logoEl && fallbackEl) {
+                logoEl.style.display = 'block';
+                fallbackEl.style.display = 'none';
+            }
+        };
+    },
+    
+    getRandomTechtokerImg: function() {
+        let loaded = this.techtokers.filter(img => img.complete && img.naturalWidth > 0);
+        if (loaded.length === 0) return null;
+        return loaded[Math.floor(Math.random() * loaded.length)];
+    }
+};
+
+// === INPUT SYSTEM ===
+const Input = {
+    keys: { w: false, a: false, s: false, d: false, space: false, e: false },
+    mouse: { x: 0, y: 0, down: false },
+    isMobile: false,
+    
+    joystick: {
+        active: false,
+        startX: 0,
+        startY: 0,
+        maxRadius: 60,
+        touchId: null,
+    },
+    joystickDx: 0,
+    joystickDy: 0,
+    
+    init: function() {
+        window.addEventListener('keydown', e => this.onKey(e, true));
+        window.addEventListener('keyup', e => this.onKey(e, false));
+        window.addEventListener('mousemove', e => {
+            this.mouse.x = e.clientX;
+            this.mouse.y = e.clientY;
+        });
+        window.addEventListener('mousedown', () => this.mouse.down = true);
+        window.addEventListener('mouseup', () => this.mouse.down = false);
+        
+        this.isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
+        
+        if (this.isMobile) {
+            this.initTouch();
+        }
+    },
+    
+    initTouch: function() {
+        const touchLayer = document.getElementById('touch-layer');
+        touchLayer.classList.add('active');
+
+        const setupBtn = (id, key) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            
+            const setKey = (state) => {
+                this.keys[key] = state;
+            };
+            
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setKey(true);
+                
+                if (key === 'e') {
+                    if (Game.state === 'DIALOGUE') {
+                        Game.advanceDialogue();
+                    }
+                    setTimeout(() => setKey(false), 100);
+                }
+            }, {passive: false});
+            
+            if (key === 'space') {
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    setKey(false);
+                }, {passive: false});
+                
+                btn.addEventListener('touchcancel', (e) => {
+                    e.preventDefault();
+                    setKey(false);
+                }, {passive: false});
+            }
+        };
+
+        setupBtn('btn-attack-mobile', 'space');
+        setupBtn('btn-interact-mobile', 'e');
+        
+        const dialogueBtn = document.getElementById('dialogue-btn');
+        if (dialogueBtn) {
+            dialogueBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (Game.state === 'DIALOGUE') {
+                    Game.advanceDialogue();
+                }
+            }, {passive: false});
+        }
+
+        // Joystick setup
+        const joystickArea = document.getElementById('joystick-area');
+        const joystickThumb = document.getElementById('joystick-thumb');
+
+        const resetJoystick = () => {
+            this.joystick.active = false;
+            this.joystick.touchId = null;
+            this.joystickDx = 0;
+            this.joystickDy = 0;
+            if (joystickThumb) {
+                joystickThumb.style.transform = 'translate(-50%, -50%)';
+            }
+        };
+        
+        joystickArea.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (this.joystick.active) return;
+            
+            const touch = e.changedTouches[0];
+            this.joystick.touchId = touch.identifier;
+            this.joystick.active = true;
+            
+            const rect = joystickArea.getBoundingClientRect();
+            this.joystick.startX = rect.left + rect.width / 2;
+            this.joystick.startY = rect.top + rect.height / 2;
+            
+            this.handleJoystickMove(touch.clientX, touch.clientY);
+        }, {passive: false});
+
+        window.addEventListener('touchmove', (e) => {
+            if (!this.joystick.active) return;
+            
+            let touch = null;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.joystick.touchId) {
+                    touch = e.changedTouches[i];
+                    break;
+                }
+            }
+            if (!touch) return;
+            
+            e.preventDefault();
+            this.handleJoystickMove(touch.clientX, touch.clientY);
+        }, {passive: false});
+
+        window.addEventListener('touchend', (e) => {
+            if (!this.joystick.active) return;
+            
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.joystick.touchId) {
+                    resetJoystick();
+                    break;
+                }
+            }
+        });
+        
+        window.addEventListener('touchcancel', resetJoystick);
+    },
+
+    handleJoystickMove: function(clientX, clientY) {
+        const thumb = document.getElementById('joystick-thumb');
+        if (!thumb) return;
+        
+        let dx = clientX - this.joystick.startX;
+        let dy = clientY - this.joystick.startY;
+        let dist = Math.hypot(dx, dy);
+
+        if (dist > this.joystick.maxRadius) {
+            dx = (dx / dist) * this.joystick.maxRadius;
+            dy = (dy / dist) * this.joystick.maxRadius;
+        }
+
+        thumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+        this.joystickDx = dx / this.joystick.maxRadius;
+        this.joystickDy = dy / this.joystick.maxRadius;
+    },
+    
+    onKey: function(e, state) {
+        const k = e.key.toLowerCase();
+        const c = e.code;
+        
+        if (c === 'KeyW' || k === 'w' || k === 'ц' || c === 'ArrowUp') this.keys.w = state;
+        if (c === 'KeyA' || k === 'a' || k === 'ф' || c === 'ArrowLeft') this.keys.a = state;
+        if (c === 'KeyS' || k === 's' || k === 'ы' || c === 'ArrowDown') this.keys.s = state;
+        if (c === 'KeyD' || k === 'd' || k === 'в' || c === 'ArrowRight') this.keys.d = state;
+        
+        if (c === 'KeyE' || k === 'e' || k === 'у') {
+            if (state && Game.state === 'DIALOGUE') {
+                Game.advanceDialogue();
+            }
+            this.keys.e = state;
+        }
+
+        if (c === 'Space') {
+            if (state && Game.state === 'DIALOGUE') {
+                Game.advanceDialogue();
+            }
+            this.keys.space = state;
+        }
+    }
+};
+
+// === CAMERA ===
+class Camera {
+    constructor() {
+        this.x = 0;
+        this.y = 0;
+        this.shake = 0;
+    }
+    
+    update(target) {
+        if (!target) return;
+        
+        const followFactor = 0.1;
+        this.x += (target.x - this.x) * followFactor;
+        this.y += (target.y - this.y) * followFactor;
+        
+        if (this.shake > 0) {
+            this.x += (Math.random() - 0.5) * this.shake;
+            this.y += (Math.random() - 0.5) * this.shake;
+            this.shake *= 0.9;
+            if (this.shake < 0.5) this.shake = 0;
+        }
+    }
+    
+    apply(ctx, canvasWidth, canvasHeight, zoom) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(zoom, zoom);
+        ctx.translate(canvasWidth / 2 / zoom, canvasHeight / 2 / zoom);
+        ctx.translate(-this.x, -this.y);
+    }
+}
+
+// === ENTITIES ===
+class Entity {
+    constructor(x, y, size) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.markedForDeletion = false;
+    }
+    
+    draw(ctx, color = 'white') {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class Player extends Entity {
+    constructor(initialHP) {
+        super(0, 0, 25);
+        this.maxHp = initialHP;
+        this.hp = initialHP;
+        this.speed = 5;
+        this.hasPhone = false;
+        this.battery = 100;
+        this.invuln = 0;
+        this.swingTimer = 0;
+        this.shootTimer = 0;
+        this.aimAngle = 0;
+    }
+    
+    update(walls) {
+        let dx = 0, dy = 0;
+        
+        if (Input.isMobile) {
+            dx = Input.joystickDx;
+            dy = Input.joystickDy;
+        } else {
+            if (Input.keys.w) dy = -1;
+            if (Input.keys.s) dy = 1;
+            if (Input.keys.a) dx = -1;
+            if (Input.keys.d) dx = 1;
+        }
+
+        if (dx !== 0 || dy !== 0) {
+            let len = Math.sqrt(dx * dx + dy * dy);
+            if (!Input.isMobile && len > 0) {
+                dx /= len;
+                dy /= len;
+            }
+
+            let mx = dx * this.speed;
+            let my = dy * this.speed;
+            
+            if (!this.checkWall(this.x + mx, this.y, walls)) this.x += mx;
+            if (!this.checkWall(this.x, this.y + my, walls)) this.y += my;
+        }
+        
+        if (this.invuln > 0) this.invuln--;
+        if (this.swingTimer > 0) this.swingTimer--;
+        if (this.shootTimer > 0) this.shootTimer--;
+        
+        const isAttacking = Input.mouse.down || Input.keys.space;
+        
+        if (Input.isMobile && isAttacking) {
+            let closestEnemy = null;
+            let minDist = Infinity;
+            Game.enemies.forEach(e => {
+                let dist = Math.hypot(e.x - this.x, e.y - this.y);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestEnemy = e;
+                }
+            });
+            
+            if (closestEnemy) {
+                this.aimAngle = Math.atan2(closestEnemy.y - this.y, closestEnemy.x - this.x);
+            } else {
+                this.aimAngle = 0;
+            }
+        } else if (isAttacking) {
+            const scale = Game.mobileZoomFactor;
+            let worldMx = (Input.mouse.x / scale) - (Game.canvas.width / 2 / scale) + Game.cam.x;
+            let worldMy = (Input.mouse.y / scale) - (Game.canvas.height / 2 / scale) + Game.cam.y;
+            this.aimAngle = Math.atan2(worldMy - this.y, worldMx - this.x);
+        }
+
+        if (Game.state === 'PLAYING' && isAttacking) {
+            if (Game.currentAct === 2 && Game.flags.hasDnsPhone) {
+                this.attack('SWING');
+            } else {
+                this.attack('SHOOT');
+            }
+        }
+    }
+
+    checkWall(x, y, walls) {
+        for (let w of walls) {
+            if (x + this.size > w.x && x - this.size < w.x + w.w &&
+                y + this.size > w.y && y - this.size < w.y + w.h) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    attack(type) {
+        if (type === 'SWING') {
+            if (this.swingTimer === 0) {
+                this.swingTimer = 20;
+                Game.createParticles(this.x, this.y, 10, '#fff');
+            }
+        } else if (type === 'SHOOT') {
+            if (this.shootTimer > 0) return;
+            this.shootTimer = 12;
+            
+            let content = "мне похуй";
+            let bType = 'TEXT';
+            
+            if (Game.currentAct === 3) {
+                content = '🔋';
+                bType = 'EMOJI';
+                this.battery -= 1.5;
+                if (this.battery < 0) this.battery = 0;
+            } else {
+                let phrases = ["мне похуй", "он удобный", "компакт топ", "заткнись"];
+                content = phrases[Math.floor(Math.random() * phrases.length)];
+            }
+            
+            Game.bullets.push(new Bullet(this.x, this.y, this.aimAngle, true, bType, content));
+        }
+    }
+    
+    hit(dmg) {
+        if (this.invuln > 0) return;
+        this.hp -= dmg;
+        this.invuln = 60;
+        Game.cam.shake = 10;
+        Game.updateHUD();
+        Game.createParticles(this.x, this.y, 15, '#e74c3c');
+        if (this.hp <= 0) Game.gameOver();
+    }
+}
+
+class Enemy extends Entity {
+    constructor(x, y, type) {
+        super(x, y, 30);
+        this.type = type;
+        this.hp = 3;
+        this.actionTimer = Math.random() * 100;
+        this.img = Assets.getRandomTechtokerImg();
+    }
+    
+    update(player, walls) {
+        let dist = Math.hypot(player.x - this.x, player.y - this.y);
+        let angle = Math.atan2(player.y - this.y, player.x - this.x);
+        
+        if (this.type === 'MELEE') {
+            let speed = 4;
+            let mx = Math.cos(angle) * speed;
+            let my = Math.sin(angle) * speed;
+            if (!this.checkWall(this.x + mx, this.y, walls)) this.x += mx;
+            if (!this.checkWall(this.x, this.y + my, walls)) this.y += my;
+            if (dist < this.size + player.size && player.invuln === 0) {
+                player.hit(1);
+            }
+        } else {
+            let keepDist = 350;
+            if (dist < keepDist) {
+                this.x -= Math.cos(angle) * 1.5;
+                this.y -= Math.sin(angle) * 1.5;
+            } else if (dist > keepDist + 100) {
+                this.x += Math.cos(angle) * 1.5;
+                this.y += Math.sin(angle) * 1.5;
+            }
+            
+            this.actionTimer--;
+            if (this.actionTimer <= 0) {
+                this.actionTimer = 80 + Math.random() * 60;
+                let phrases = ["12 мини отстой", "ода рефка", "бери про", "откат"];
+                let txt = phrases[Math.floor(Math.random() * phrases.length)];
+                Game.bullets.push(new Bullet(this.x, this.y, angle, false, 'TEXT', txt));
+            }
+        }
+    }
+
+    checkWall(x, y, walls) {
+        for (let w of walls) {
+            if (x + this.size > w.x && x - this.size < w.x + w.w &&
+                y + this.size > w.y && y - this.size < w.y + w.h) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    draw(ctx, color='red') {
+        if (this.img && this.img.complete && this.img.naturalWidth > 0) {
+            let w = this.size * 2;
+            let h = (this.img.height / this.img.width) * w;
+            ctx.drawImage(this.img, -w/2, -h/2, w, h);
+        } else {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.font = '40px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('😈', 0, 15);
+        }
+    }
+}
+
+class Boss extends Entity {
+    constructor(x, y) {
+        super(x, y, 80);
+        this.hp = 200;
+        this.maxHp = 200;
+        this.timer = 0;
+        this.attackPattern = 0;
+    }
+    
+    update() {
+        this.timer++;
+        this.y += Math.sin(this.timer * 0.05) * 2;
+        
+        if (this.timer % 90 === 0) {
+            this.attackPattern = (this.attackPattern + 1) % 3;
+            this.attack();
+        }
+        
+        if (this.hp <= 0 && Game.state === 'PLAYING') {
+            Game.state = 'EPILOGUE';
+            Game.epilogueTimer = 0;
+            document.getElementById('ui-layer').style.display = 'none';
+            Game.createParticles(this.x, this.y, 30, '#f1c40f');
+            // КРИТИЧНО: Удаляем босса из игры
+            Game.boss = null;
+        }
+    }
+    
+    attack() {
+        Game.cam.shake = 5;
+        
+        if (this.attackPattern === 0) {
+            // Веер из 9 айфонов
+            let count = 9;
+            let startAngle = Math.atan2(Game.player.y - this.y, Game.player.x - this.x) - 0.7;
+            let angleSpan = 1.4;
+            let angleInc = angleSpan / (count - 1);
+            
+            for (let i = 0; i < count; i++) {
+                Game.bullets.push(new Bullet(
+                    this.x, this.y,
+                    startAngle + i * angleInc,
+                    false, 'EMOJI', '📱'
+                ));
+            }
+        } else if (this.attackPattern === 1) {
+            // Спираль
+            for (let i = 0; i < 8; i++) {
+                let angle = (Math.PI * 2 / 8) * i + this.timer * 0.1;
+                Game.bullets.push(new Bullet(
+                    this.x, this.y,
+                    angle,
+                    false, 'EMOJI', '📱'
+                ));
+            }
+        } else {
+            // Целенаправленная атака
+            let angle = Math.atan2(Game.player.y - this.y, Game.player.x - this.x);
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => {
+                    if (Game.boss && Game.state === 'PLAYING') {
+                        Game.bullets.push(new Bullet(
+                            this.x, this.y,
+                            angle + (Math.random() - 0.5) * 0.3,
+                            false, 'EMOJI', '📱'
+                        ));
+                    }
+                }, i * 100);
+            }
+        }
+    }
+}
+
+class Bullet extends Entity {
+    constructor(x, y, angle, isPlayer, type, content) {
+        super(x, y, 15);
+        this.vx = Math.cos(angle) * 9;
+        this.vy = Math.sin(angle) * 9;
+        this.isPlayer = isPlayer;
+        this.type = type;
+        this.content = content;
+        this.life = 100;
+    }
+    
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        if (this.life <= 0) this.markedForDeletion = true;
+    }
+}
+
+class Pickup extends Entity {
+    constructor(x, y) {
+        super(x, y, 20);
+    }
+    
+    update(player) {
+        if (Math.hypot(player.x - this.x, player.y - this.y) < 40) {
+            if (player.hp < player.maxHp) {
+                player.hp++;
+                Game.updateHUD();
+                this.markedForDeletion = true;
+                Game.createParticles(this.x, this.y, 10, '#e74c3c');
+            }
+        }
+    }
+}
+
+// === GAME ENGINE ===
+const Game = {
+    canvas: document.getElementById('gameCanvas'),
+    ctx: document.getElementById('gameCanvas').getContext('2d'),
+    state: 'MENU',
+    mode: 'STORY',
+    currentAct: 1,
+    initialHP: 3,
+    player: null,
+    cam: new Camera(),
+    walls: [],
+    enemies: [],
+    bullets: [],
+    pickups: [],
+    props: [],
+    boss: null,
+    particles: [],
+    score: 0,
+    flags: { act1Kills: 0, hasDnsPhone: false, readyToThrow: false },
+    
+    mobileZoomFactor: 1.0,
+    
+    init: function() {
+        this.mobileZoomFactor = Input.isMobile ? 0.6 : 1.0;
+        
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        
+        Assets.loadAll();
+        Input.init();
+        this.setupEventListeners();
+        this.setDifficulty('NORMAL');
+        
+        this.loop();
+    },
+    
+    resize: function() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+    },
+    
+    setupEventListeners: function() {
+        const addHandler = (id, handler) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                handler();
+            });
+            
+            el.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                handler();
+            }, {passive: false});
+        };
+        
+        addHandler('btn-easy-menu', () => this.setDifficulty('EASY'));
+        addHandler('btn-normal-menu', () => this.setDifficulty('NORMAL'));
+        addHandler('btn-hard-menu', () => this.setDifficulty('HARD'));
+        addHandler('btn-story', () => this.start('STORY'));
+        addHandler('btn-infinity', () => this.start('INFINITY'));
+        addHandler('dialogue-btn', () => {
+            if (this.state === 'DIALOGUE') this.advanceDialogue();
+        });
+    },
+
+    setDifficulty: function(level) {
+        document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
+        
+        if (level === 'EASY') {
+            this.initialHP = 5;
+            document.getElementById('btn-easy-menu').classList.add('active');
+        } else if (level === 'NORMAL') {
+            this.initialHP = 3;
+            document.getElementById('btn-normal-menu').classList.add('active');
+        } else if (level === 'HARD') {
+            this.initialHP = 1;
+            document.getElementById('btn-hard-menu').classList.add('active');
+        }
+    },
+    
+    start: function(mode) {
+        this.mode = mode;
+        this.state = 'PLAYING';
+        this.player = new Player(this.initialHP);
+        this.score = 0;
+        this.particles = [];
+        this.flags = { act1Kills: 0, hasDnsPhone: false, readyToThrow: false };
+        
+        const menuLayer = document.getElementById('menu-layer');
+        menuLayer.classList.add('hidden');
+        
+        document.getElementById('ui-layer').style.display = 'block';
+        document.getElementById('main-hud').style.display = 'flex';
+        document.getElementById('boss-ui').style.display = 'none';
+
+        if (mode === 'INFINITY') {
+            this.startInfinity();
+        } else {
+            this.startAct1();
+        }
+    },
+    
+    createParticles: function(x, y, count, color) {
+        for (let i = 0; i < count; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let speed = 2 + Math.random() * 4;
+            this.particles.push(new Particle(
+                x, y,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed - 2,
+                color,
+                30 + Math.random() * 20
+            ));
+        }
+    },
+    
+    startAct1: function() {
+        this.currentAct = 1;
+        this.walls = [
+            {x: -500, y: -500, w: 1000, h: 50},
+            {x: -500, y: 450, w: 1000, h: 50},
+            {x: -500, y: -500, w: 50, h: 1000},
+            {x: 450, y: -500, w: 50, h: 1000}
+        ];
+        this.enemies = [];
+        this.bullets = [];
+        this.pickups = [];
+        this.props = [];
+        this.player.x = 0;
+        this.player.y = 0;
+        
+        this.dialogue([
+            {n: "YSKA69", t: "Я должен купить iPhone 12 Mini."},
+            {n: "ЧАТ", t: "Ода рефка! Бери лопату!"},
+            {n: "ЗАДАЧА", t: "Уничтожьте 20 ТечТокеров."}
+        ]);
+    },
+    
+    startAct2: function() {
+        this.currentAct = 2;
+        this.player.x = 0;
+        this.player.y = 0;
+        this.enemies = [];
+        this.bullets = [];
+        this.pickups = [];
+        this.generateMall();
+        
+        this.dialogue([
+            {n: "СИСТЕМА", t: "АКТ II: ТЦ 'ЭМПОРИУМ'"},
+            {n: "ЗАДАЧА", t: "Заберите свой 12 Mini в магазине DNS. Сбегите на самокате."}
+        ]);
+    },
+    
+    generateMall: function() {
+        this.walls = [];
+        this.props = [];
+        
+        const mallMin = -500;
+        const mallMax = 2000;
+        const mapSize = mallMax - mallMin;
+        const edgePadding = 400;
+
+        const randomCoord = () => mallMin + edgePadding + Math.random() * (mapSize - 2 * edgePadding);
+
+        for (let i = 0; i < 6; i++) {
+            for (let j = 0; j < 6; j++) {
+                let wx = i * 350 + mallMin;
+                let wy = j * 350 + mallMin;
+                
+                if (Math.random() > 0.6) {
+                    this.walls.push({x: wx, y: wy, w: 20, h: 250});
+                    this.walls.push({x: wx, y: wy, w: 250, h: 20});
+                } else if (Math.random() > 0.4) {
+                    this.props.push({type: 'DECOR', x: wx + 100, y: wy + 100});
+                    this.walls.push({x: wx + 80, y: wy + 80, w: 40, h: 40});
+                }
+            }
+        }
+        
+        this.props.push({type: 'DNS_STORE', x: randomCoord(), y: randomCoord()});
+        this.props.push({type: 'SCOOTER', x: randomCoord(), y: randomCoord()});
+
+        this.walls.push({x: mallMin, y: mallMin, w: mapSize, h: 50});
+        this.walls.push({x: mallMin, y: mallMax, w: mapSize, h: 50});
+        this.walls.push({x: mallMin, y: mallMin, w: 50, h: mapSize + 50});
+        this.walls.push({x: mallMax, y: mallMin, w: 50, h: mapSize + 50});
+    },
+    
+    startAct3: function() {
+        this.currentAct = 3;
+        this.player.x = 0;
+        this.player.y = 400;
+        this.walls = [];
+        this.enemies = [];
+        this.props = [];
+        this.boss = new Boss(0, -200);
+        
+        document.getElementById('boss-ui').style.display = 'block';
+        document.getElementById('ammo-display').style.display = 'block';
+        
+        this.dialogue([
+            {n: "ТИМ КУК", t: "Инновации требуют жертв."},
+            {n: "YSKA69", t: "Компактность — это свобода."}
+        ]);
+    },
+    
+    startInfinity: function() {
+        this.currentAct = 999;
+        this.walls = [];
+        this.enemies = [];
+        this.player.x = 0;
+        this.player.y = 0;
+        
+        document.getElementById('score-display').style.display = 'block';
+        document.getElementById('ammo-display').style.display = 'none';
+        this.player.hasPhone = false;
+        this.player.battery = 100;
+    },
+    
+    loop: function() {
+        this.update();
+        this.draw();
+        requestAnimationFrame(() => this.loop());
+    },
+    
+    update: function() {
+        if (this.state === 'MENU' || this.state === 'GAMEOVER') return;
+        if (this.state !== 'PLAYING' && this.state !== 'EPILOGUE') return;
+        
+        if (this.player) {
+            this.cam.update(this.player);
+            this.player.update(this.walls);
+        }
+        
+        if (this.state === 'PLAYING') {
+            if (this.currentAct === 1 && this.enemies.length < 5 && (this.flags.act1Kills + this.enemies.length < 20)) {
+                if (Math.random() < 0.02) this.spawnEnemy('RANGED');
+            }
+            
+            if (this.currentAct === 2 && this.flags.hasDnsPhone && this.enemies.length < 25) {
+                if (Math.random() < 0.1) this.spawnEnemy('MELEE');
+            }
+            
+            if (this.currentAct === 999 && this.enemies.length < 20 + this.score / 10) {
+                if (Math.random() < 0.05) this.spawnEnemy(Math.random() > 0.5 ? 'RANGED' : 'MELEE');
+            }
+        }
+        
+        this.enemies.forEach(e => e.update(this.player, this.walls));
+        this.bullets.forEach(b => b.update());
+        this.pickups.forEach(p => p.update(this.player));
+        if (this.boss) this.boss.update();
+        
+        this.particles.forEach(p => p.update());
+        this.particles = this.particles.filter(p => p.life > 0);
+        
+        this.handleCollisions();
+        this.checkObjectives();
+        
+        this.enemies = this.enemies.filter(e => !e.markedForDeletion);
+        this.bullets = this.bullets.filter(b => !b.markedForDeletion);
+        this.pickups = this.pickups.filter(p => !p.markedForDeletion);
+        this.props = this.props.filter(p => !p.markedForDeletion);
+    },
+    
+    spawnEnemy: function(type) {
+        let ex, ey, dist;
+        let safeDist = 300;
+
+        if (this.currentAct === 1) {
+            const boxMin = -450;
+            const boxMax = 450;
+            
+            do {
+                ex = boxMin + Math.random() * (boxMax - boxMin);
+                ey = boxMin + Math.random() * (boxMax - boxMin);
+                dist = Math.hypot(this.player.x - ex, this.player.y - ey);
+            } while (dist < safeDist);
+            
+        } else if (this.currentAct === 2) {
+            const mallMin = -500;
+            const mallMax = 2000;
+            const mapSize = mallMax - mallMin;
+            const edgePadding = 100;
+            
+            do {
+                ex = mallMin + edgePadding + Math.random() * (mapSize - 2 * edgePadding);
+                ey = mallMin + edgePadding + Math.random() * (mapSize - 2 * edgePadding);
+                dist = Math.hypot(this.player.x - ex, this.player.y - ey);
+            } while (dist < safeDist);
+
+        } else {
+            let angle = Math.random() * Math.PI * 2;
+            let spawnDist = 600;
+            ex = this.player.x + Math.cos(angle) * spawnDist;
+            ey = this.player.y + Math.sin(angle) * spawnDist;
+        }
+
+        this.enemies.push(new Enemy(ex, ey, type));
+    },
+    
+    handleCollisions: function() {
+        this.bullets.forEach(b => {
+            if (b.isPlayer) {
+                this.enemies.forEach(e => {
+                    if (Math.hypot(b.x - e.x, b.y - e.y) < e.size + b.size) {
+                        e.hp--;
+                        b.markedForDeletion = true;
+                        this.createParticles(e.x, e.y, 5, '#e74c3c');
+                        
+                        if (e.hp <= 0) {
+                            e.markedForDeletion = true;
+                            this.score++;
+                            if (this.currentAct === 1) this.flags.act1Kills++;
+                            if (this.currentAct !== 1 && Math.random() < 0.1) {
+                                this.pickups.push(new Pickup(e.x, e.y));
+                            }
+                            this.createParticles(e.x, e.y, 15, '#f39c12');
+                        }
+                    }
+                });
+                
+                if (this.boss && Math.hypot(b.x - this.boss.x, b.y - this.boss.y) < this.boss.size + 20) {
+                    this.boss.hp--;
+                    b.markedForDeletion = true;
+                    this.cam.shake = 2;
+                    this.createParticles(this.boss.x, this.boss.y, 5, '#f1c40f');
+                }
+            } else {
+                if (Math.hypot(b.x - this.player.x, b.y - this.player.y) < this.player.size) {
+                    this.player.hit(1);
+                    b.markedForDeletion = true;
+                }
+            }
+        });
+
+        if (this.player.swingTimer > 0 && this.currentAct === 2 && this.flags.hasDnsPhone) {
+            let range = 110;
+            let arc = 1.2;
+            this.enemies.forEach(e => {
+                let dist = Math.hypot(e.x - this.player.x, e.y - this.player.y);
+                if (dist < range) {
+                    let angleToEnemy = Math.atan2(e.y - this.player.y, e.x - this.player.x);
+                    let angleDiff = angleToEnemy - this.player.aimAngle;
+                    while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                    if (Math.abs(angleDiff) < arc / 2) {
+                        e.hp -= 10;
+                        e.markedForDeletion = true;
+                        this.cam.shake = 5;
+                        this.createParticles(e.x, e.y, 20, '#fff');
+                    }
+                }
+            });
+        }
+    },
+    
+    checkObjectives: function() {
+        let prompt = document.getElementById('interact-prompt');
+        prompt.style.display = 'none';
+        
+        if (this.currentAct === 1 && this.flags.act1Kills >= 20) {
+            this.dialogue([{n: "СИСТЕМА", t: "Чат свернут. Выход в оффлайн..."}]);
+            setTimeout(() => this.startAct2(), 2000);
+        }
+        
+        if (this.currentAct === 2) {
+            let dnsStore = this.props.find(p => p.type === 'DNS_STORE');
+            if (dnsStore && !this.flags.hasDnsPhone) {
+                if (Math.hypot(this.player.x - dnsStore.x, this.player.y - dnsStore.y) < 150) {
+                    this.showPrompt(dnsStore.x, dnsStore.y, "ЗАБРАТЬ 12 MINI [E]");
+                    if (Input.keys.e) {
+                        this.flags.hasDnsPhone = true;
+                        this.player.hasPhone = true;
+                        this.createParticles(dnsStore.x, dnsStore.y, 20, '#3498db');
+                        this.dialogue([
+                            {n: "YSKA69", t: "Наконец-то. Компактность в моих руках!"},
+                            {n: "ЗАДАЧА", t: "Бегите к самокату!"}
+                        ]);
+                    }
+                }
+            }
+            
+            let scooter = this.props.find(p => p.type === 'SCOOTER');
+            if (scooter && this.flags.hasDnsPhone) {
+                if (Math.hypot(this.player.x - scooter.x, this.player.y - scooter.y) < 100) {
+                    this.showPrompt(scooter.x, scooter.y, "УЕХАТЬ [E]");
+                    if (Input.keys.e) {
+                        this.startAct3();
+                    }
+                }
+            }
+        }
+        
+        if (this.currentAct === 3) {
+            if (this.player.battery <= 0 && !this.flags.readyToThrow) {
+                this.flags.readyToThrow = true;
+                this.dialogue([{n: "СИСТЕМА", t: "БАТАРЕЯ 0%. НАЖМИТЕ [E] ЧТОБЫ БРОСИТЬ ТЕЛЕФОН!"}]);
+            }
+            if (this.flags.readyToThrow && Input.keys.e) {
+                this.state = 'EPILOGUE';
+                this.epilogueTimer = 0;
+                document.getElementById('ui-layer').style.display = 'none';
+            }
+        }
+    },
+    
+    showPrompt: function(wx, wy, text) {
+        let prompt = document.getElementById('interact-prompt');
+        const scale = this.mobileZoomFactor;
+        const screenX = (wx - this.cam.x) * scale + this.canvas.width / 2;
+        const screenY = (wy - this.cam.y) * scale + this.canvas.height / 2;
+        
+        prompt.style.left = screenX + 'px';
+        prompt.style.top = screenY - (60 * scale) + 'px';
+        prompt.innerText = text;
+        prompt.style.display = 'block';
+    },
+    
+    draw: function() {
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.ctx.fillStyle = '#111';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        if (this.state === 'MENU') {
+            this.drawGrid();
+            return;
+        }
+        
+        if (this.state === 'EPILOGUE') {
+            this.drawEpilogue();
+            return;
+        }
+        
+        this.cam.apply(this.ctx, this.canvas.width, this.canvas.height, this.mobileZoomFactor);
+        
+        if (this.currentAct === 1) {
+            this.drawMatrixBg();
+        } else if (this.currentAct === 2) {
+            this.drawMallFloor();
+        } else if (this.currentAct === 3) {
+            this.drawOfficeBg();
+        } else {
+            this.drawGrid();
+        }
+
+        this.ctx.fillStyle = '#444';
+        this.walls.forEach(w => {
+            this.ctx.fillRect(w.x, w.y, w.w, w.h);
+            this.ctx.strokeStyle = '#666';
+            this.ctx.strokeRect(w.x, w.y, w.w, w.h);
+        });
+        
+        this.props.forEach(p => {
+            this.ctx.save();
+            this.ctx.translate(p.x, p.y);
+            
+            if (p.type === 'DNS_STORE') {
+                this.ctx.fillStyle = '#f39c12';
+                this.ctx.fillRect(-150, -150, 300, 300);
+                this.ctx.fillStyle = '#2c3e50';
+                this.ctx.fillRect(-140, -140, 280, 280);
+                
+                const dnsLogo = Assets.images.dns_logo;
+                if (dnsLogo && dnsLogo.complete && dnsLogo.naturalWidth > 0) {
+                    let logoW = 180;
+                    let logoH = (dnsLogo.height / dnsLogo.width) * logoW;
+                    this.ctx.drawImage(dnsLogo, -logoW/2, -logoH/2, logoW, logoH);
+                } else {
+                    this.ctx.fillStyle = this.flags.hasDnsPhone ? '#27ae60' : '#f1c40f';
+                    this.ctx.font = 'bold 50px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('DNS', 0, 15);
+                }
+                
+                if (!this.flags.hasDnsPhone) {
+                    const phoneImg = Assets.images.phone;
+                    if (phoneImg && phoneImg.complete && phoneImg.naturalWidth > 0) {
+                        this.ctx.drawImage(phoneImg, -20, 20, 40, 60);
+                    } else {
+                        this.ctx.fillStyle = 'white';
+                        this.ctx.font = '30px Arial';
+                        this.ctx.fillText('📱', 0, 60);
+                    }
+                }
+            } else if (p.type === 'SCOOTER') {
+                const scooterImg = Assets.images.scooter;
+                if (scooterImg && scooterImg.complete && scooterImg.naturalWidth > 0) {
+                    this.ctx.drawImage(scooterImg, -40, -40, 80, 80);
+                } else {
+                    this.ctx.font = '80px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('🛴', 0, 25);
+                }
+            } else if (p.type === 'DECOR') {
+                this.ctx.font = '40px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('🌳', 0, 15);
+            }
+            this.ctx.restore();
+        });
+        
+        this.pickups.forEach(p => {
+            this.ctx.save();
+            this.ctx.translate(p.x, p.y);
+            
+            const heartImg = Assets.images.heart;
+            if (heartImg && heartImg.complete && heartImg.naturalWidth > 0) {
+                let w = p.size * 2;
+                let h = (heartImg.height / heartImg.width) * w;
+                this.ctx.drawImage(heartImg, -w/2, -h/2, w, h);
+            } else {
+                p.draw(this.ctx, '#e74c3c');
+                this.ctx.font = '30px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('❤️', 0, 10);
+            }
+            this.ctx.restore();
+        });
+        
+        this.enemies.forEach(e => {
+            this.ctx.save();
+            this.ctx.translate(e.x, e.y);
+            e.draw(this.ctx, '#e74c3c');
+            this.ctx.restore();
+        });
+        
+        if (this.boss) {
+            this.ctx.save();
+            this.ctx.translate(this.boss.x, this.boss.y);
+            
+            const img = Assets.images.tim;
+            if (img && img.complete && img.naturalWidth > 0) {
+                let w = this.boss.size * 2.5;
+                let h = (img.height / img.width) * w;
+                this.ctx.drawImage(img, -w/2, -h/2, w, h);
+            } else {
+                this.boss.draw(this.ctx, 'gray');
+                this.ctx.font = '100px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('🍎', 0, 35);
+            }
+            this.ctx.restore();
+        }
+        
+        if (this.player) {
+            this.ctx.save();
+            this.ctx.translate(this.player.x, this.player.y);
+            
+            if (this.player.invuln > 0 && Math.floor(this.player.invuln / 5) % 2 === 0) {
+                this.ctx.globalAlpha = 0.5;
+            }
+            
+            const heroImg = Assets.images.hero;
+            if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
+                let w = this.player.size * 2;
+                let h = (heroImg.height / heroImg.width) * w;
+                this.ctx.drawImage(heroImg, -w/2, -h/2, w, h);
+            } else {
+                this.player.draw(this.ctx, '#3498db');
+                this.ctx.font = '40px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('😎', 0, 15);
+            }
+            
+            this.ctx.globalAlpha = 1;
+            
+            if (this.player.swingTimer > 0 && this.currentAct === 2 && this.flags.hasDnsPhone) {
+                let range = 110;
+                let arc = 1.2;
+                let startA = this.player.aimAngle - arc / 2;
+                let endA = this.player.aimAngle + arc / 2;
+                
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, range, startA, endA);
+                this.ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+                this.ctx.lineWidth = 8;
+                this.ctx.stroke();
+
+                this.ctx.save();
+                this.ctx.rotate(this.player.aimAngle);
+                
+                const phoneImg = Assets.images.phone;
+                if (phoneImg && phoneImg.complete && phoneImg.naturalWidth > 0) {
+                    this.ctx.drawImage(phoneImg, range - 45, -25, 50, 50);
+                } else {
+                    this.ctx.font = '50px Arial';
+                    this.ctx.fillText('📱', range - 25, 15);
+                }
+                this.ctx.restore();
+            }
+            this.ctx.restore();
+        }
+        
+        this.bullets.forEach(b => {
+            this.ctx.save();
+            this.ctx.translate(b.x, b.y);
+            
+            if (b.type === 'IMAGE' || b.type === 'EMOJI') {
+                this.ctx.rotate(b.life * 0.1);
+                this.ctx.fillStyle = b.isPlayer ? '#3498db' : '#e74c3c';
+                this.ctx.font = '30px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(b.content, 0, 10);
+            } else {
+                this.ctx.fillStyle = b.isPlayer ? '#3498db' : '#e74c3c';
+                this.ctx.font = 'bold 16px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(b.content, 0, 5);
+            }
+            this.ctx.restore();
+        });
+        
+        this.particles.forEach(p => p.draw(this.ctx));
+        
+        this.updateHUD();
+    },
+    
+    drawMatrixBg: function() {
+        this.ctx.fillStyle = '#001000';
+        this.ctx.fillRect(-500, -500, 1000, 1000);
+        this.ctx.fillStyle = '#002200';
+        this.ctx.font = "14px monospace";
+        let sz = 60;
+        for (let x = -500; x < 500; x += sz) {
+            for (let y = -500; y < 500; y += sz) {
+                let char = ((x + y) % 3 === 0) ? "1" : "0";
+                this.ctx.fillText(char, x, y);
+            }
+        }
+    },
+    
+    drawMallFloor: function() {
+        let size = 2500;
+        let min = -500;
+        this.ctx.fillStyle = '#111';
+        this.ctx.fillRect(min, min, size, size);
+        let tileSize = 150;
+        for (let x = min; x < min + size; x += tileSize) {
+            for (let y = min; y < min + size; y += tileSize) {
+                this.ctx.fillStyle = ((Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2 === 0) ? '#4a4a4a' : '#6b6b6b';
+                this.ctx.fillRect(x, y, tileSize, tileSize);
+            }
+        }
+    },
+
+    drawOfficeBg: function() {
+        const officeImg = Assets.images.office;
+        if (officeImg && officeImg.complete && officeImg.naturalWidth > 0) {
+            this.ctx.drawImage(officeImg, -1000, -1000, 2000, 2000);
+        } else {
+            this.ctx.fillStyle = '#2c3e50';
+            this.ctx.fillRect(-1500, -1500, 3000, 3000);
+        }
+    },
+    
+    drawGrid: function() {
+        this.ctx.strokeStyle = '#222';
+        this.ctx.lineWidth = 2;
+        let sz = 100;
+        this.ctx.beginPath();
+        for (let x = -2000; x < 2000; x += sz) {
+            this.ctx.moveTo(x, -2000);
+            this.ctx.lineTo(x, 2000);
+        }
+        for (let y = -2000; y < 2000; y += sz) {
+            this.ctx.moveTo(-2000, y);
+            this.ctx.lineTo(2000, y);
+        }
+        this.ctx.stroke();
+    },
+
+    epilogueTimer: 0,
+    
+    drawEpilogue: function() {
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.epilogueTimer++;
+        let t = this.epilogueTimer;
+        
+        if (t < 120) {
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${1 - t / 120})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            return;
+        }
+        
+        let grad = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+        grad.addColorStop(0, "#2c3e50");
+        grad.addColorStop(0.5, "#d35400");
+        grad.addColorStop(1, "#f1c40f");
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        this.ctx.fillStyle = "yellow";
+        this.ctx.beginPath();
+        this.ctx.arc(this.canvas.width / 2, this.canvas.height - 180, 80, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        this.ctx.fillStyle = "#2980b9";
+        this.ctx.fillRect(0, this.canvas.height - 180, this.canvas.width, 100);
+        
+        this.ctx.fillStyle = "#e67e22";
+        let sandY = this.canvas.height - 80;
+        this.ctx.fillRect(0, sandY, this.canvas.width, 80);
+        
+        let cx = this.canvas.width / 2;
+        let charY = this.canvas.height - 40;
+        
+        // Машина
+        const carImg = Assets.images.car;
+        if (carImg && carImg.complete && carImg.naturalWidth > 0) {
+            this.ctx.drawImage(carImg, cx - 200, sandY - 20, 200, 100);
+        } else {
+            this.ctx.fillStyle = '#34495e';
+            this.ctx.fillRect(cx - 200, sandY - 20, 200, 100);
+            this.ctx.fillStyle = '#95a5a6';
+            this.ctx.fillRect(cx - 170, sandY - 10, 40, 40);
+            this.ctx.fillRect(cx - 100, sandY - 10, 40, 40);
+        }
+        
+        // Герои
+        const heroImg = Assets.images.hero;
+        const allyImg = Assets.images.ally;
+        
+        if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
+            this.ctx.drawImage(heroImg, cx + 20, charY - 80, 50, 50);
+        } else {
+            this.ctx.font = '50px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('😎', cx + 45, charY - 55);
+        }
+        
+        if (allyImg && allyImg.complete && allyImg.naturalWidth > 0) {
+            this.ctx.drawImage(allyImg, cx + 80, charY - 80, 50, 50);
+        } else {
+            this.ctx.font = '50px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('🤝', cx + 105, charY - 55);
+        }
+
+        // Телефоны в руках
+        const phoneImg = Assets.images.phone;
+        if (phoneImg && phoneImg.complete && phoneImg.naturalWidth > 0) {
+            this.ctx.drawImage(phoneImg, cx + 55, charY - 70, 15, 25);
+            this.ctx.drawImage(phoneImg, cx + 85, charY - 70, 15, 25);
+        } else {
+            this.ctx.font = '25px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('📱', cx + 55, charY - 45);
+            this.ctx.fillText('📱', cx + 85, charY - 45);
+        }
+
+        // Текст
+        this.ctx.fillStyle = "white";
+        this.ctx.shadowColor = "black";
+        this.ctx.shadowBlur = 4;
+        this.ctx.font = "20px Arial";
+        this.ctx.textAlign = "center";
+        
+        if (t > 150 && t < 400) {
+            this.ctx.fillText("*1049 достал два новых айфона 12 мини и передал один Уске*", cx, charY - 220);
+        }
+        if (t > 250) this.ctx.fillText("1049: Я знал, что ты справишься.", cx, charY - 190);
+        if (t > 400) this.ctx.fillText("У Yska69 есть его iPhone 12 Mini.", cx, charY - 160);
+        if (t > 550) {
+            this.ctx.font = "bold 60px Arial";
+            this.ctx.fillText("КОНЕЦ", cx, this.canvas.height / 2);
+        }
+    },
+    
+    updateHUD: function() {
+        if (!this.player) return;
+        
+        let hpStr = "❤️".repeat(Math.max(0, this.player.hp));
+        document.getElementById('hp-display').innerText = `HP: ${hpStr} (${this.player.hp}/${this.player.maxHp})`;
+        document.getElementById('score-display').innerText = "KILLS: " + this.score;
+        
+        if (this.currentAct === 3) {
+            document.getElementById('ammo-display').innerHTML = `BATTERY: <span style='color:${this.player.battery > 20 ? 'lime' : 'red'}'>${Math.floor(this.player.battery)}%</span>`;
+            if (this.boss) {
+                document.getElementById('boss-hp').style.width = (this.boss.hp / this.boss.maxHp * 100) + "%";
+            }
+        }
+    },
+    
+    dialogueQueue: [],
+    
+    dialogue: function(lines) {
+        this.state = 'DIALOGUE';
+        this.dialogueQueue = lines;
+        document.getElementById('dialogue-box').style.display = 'block';
+        this.advanceDialogue();
+    },
+    
+    advanceDialogue: function() {
+        if (this.dialogueQueue.length > 0) {
+            let line = this.dialogueQueue.shift();
+            document.getElementById('d-char').innerText = line.n;
+            document.getElementById('d-text').innerText = line.t;
+        } else {
+            document.getElementById('dialogue-box').style.display = 'none';
+            this.state = 'PLAYING';
+        }
+    },
+    
+    gameOver: function() {
+        this.state = 'GAMEOVER';
+        
+        const msg = document.createElement('div');
+        msg.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:30px;background:rgba(231,76,60,0.95);color:white;font-size:30px;border-radius:15px;z-index:1000;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.5);';
+        msg.innerHTML = "💀 ВЫ ПРОИГРАЛИ 💀<br><small style='font-size:18px;'>Обновите страницу для перезапуска</small>";
+        document.body.appendChild(msg);
+        
+        setTimeout(() => location.reload(), 3000);
+    }
+};
+
+window.onload = function() {
+    Game.init();
+}
+</script>
+</body>
+</html>
