@@ -64,6 +64,12 @@
             z-index: 10;
         }
         
+        #boss-phase {
+            font-size: 14px;
+            color: #f39c12;
+            margin-top: 5px;
+        }
+        
         .boss-bar-bg { 
             width: 100%; 
             height: 15px; 
@@ -77,6 +83,25 @@
             height: 100%; 
             background: #e74c3c; 
             transition: width 0.1s; 
+        }
+
+        #boss-warning {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            color: #e74c3c;
+            text-shadow: 0 0 20px #e74c3c;
+            display: none;
+            z-index: 100;
+            animation: pulse 0.5s infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 0.7; transform: translate(-50%, -50%) scale(1.1); }
         }
 
         #interact-prompt {
@@ -94,6 +119,23 @@
             transform: translate(-50%, -100%); 
             text-align: center;
             pointer-events: none;
+        }
+        
+        /* Стиль для индикатора баффов */
+        #buffs-display {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 14px;
+            text-shadow: 1px 1px 2px black;
+        }
+        .buff-icon {
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         #dialogue-box {
@@ -227,15 +269,17 @@
         
         #btn-attack-mobile { 
             border-radius: 50%; 
-            width: 90px; 
-            height: 90px; 
-            font-size: 32px; 
+            width: 100px;
+            height: 100px; 
+            font-size: 36px;
             background: rgba(231, 76, 60, 0.3); 
             border-color: #e74c3c;
+            box-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
         }
         
         #btn-attack-mobile:active {
             background: rgba(231, 76, 60, 0.6);
+            box-shadow: 0 0 30px rgba(231, 76, 60, 0.8);
         }
         
         #btn-interact-mobile { 
@@ -335,6 +379,7 @@
 
 <canvas id="gameCanvas"></canvas>
 <div id="interact-prompt">E</div>
+<div id="boss-warning">⚠️ APPLE EVENT ⚠️</div>
 
 <div id="touch-layer">
     <div id="joystick-area">
@@ -355,8 +400,11 @@
         <div id="ammo-display" style="display:none;">BATTERY: 100%</div>
         <div id="score-display" style="display:none;">KILLS: 0</div>
     </div>
+    <div id="buffs-display"></div>
+    
     <div id="boss-ui">
         <span style="font-size: 20px; font-weight: bold;">ТИМ КУК</span>
+        <div id="boss-phase">ФАЗА 1</div>
         <div class="boss-bar-bg"><div id="boss-hp" class="boss-bar-fill"></div></div>
     </div>
 </div>
@@ -436,9 +484,16 @@ const Assets = {
         p_17: 'картинки/iPhone17.png',
         p_air: 'картинки/iPhoneAir.png',
         p_16e: 'картинки/iPhone16e.png',
-        dns_logo: 'картинки/dns_logo.png'
+        dns_logo: 'картинки/dns_logo.png',
+        // НОВЫЕ БАФФЫ
+        buff_heal: 'картинки/buff_heal.png',
+        buff_speed: 'картинки/buff_speed.png',
+        buff_multishot: 'картинки/buff_multishot.png',
+        buff_shield: 'картинки/buff_shield.png',
+        buff_damage: 'картинки/buff_damage.png'
     },
     techtokers: [],
+    bossProjectileKeys: ['p_17pro', 'p_17', 'p_air', 'p_16e'],
     
     loadAll: function() {
         for (let key in this.list) {
@@ -469,6 +524,10 @@ const Assets = {
         let loaded = this.techtokers.filter(img => img.complete && img.naturalWidth > 0);
         if (loaded.length === 0) return null;
         return loaded[Math.floor(Math.random() * loaded.length)];
+    },
+    
+    getRandomBossProjectileKey: function() {
+        return this.bossProjectileKeys[Math.floor(Math.random() * this.bossProjectileKeys.length)];
     }
 };
 
@@ -487,6 +546,7 @@ const Input = {
     },
     joystickDx: 0,
     joystickDy: 0,
+    attackPressed: false,
     
     init: function() {
         window.addEventListener('keydown', e => this.onKey(e, true));
@@ -498,11 +558,16 @@ const Input = {
         window.addEventListener('mousedown', () => this.mouse.down = true);
         window.addEventListener('mouseup', () => this.mouse.down = false);
         
-        this.isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
+        this.checkMobile();
+        window.addEventListener('resize', () => this.checkMobile());
         
         if (this.isMobile) {
             this.initTouch();
         }
+    },
+
+    checkMobile: function() {
+        this.isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
     },
     
     initTouch: function() {
@@ -515,6 +580,9 @@ const Input = {
             
             const setKey = (state) => {
                 this.keys[key] = state;
+                if (key === 'space') {
+                    this.attackPressed = state;
+                }
             };
             
             btn.addEventListener('touchstart', (e) => {
@@ -556,7 +624,6 @@ const Input = {
             }, {passive: false});
         }
 
-        // Joystick setup
         const joystickArea = document.getElementById('joystick-area');
         const joystickThumb = document.getElementById('joystick-thumb');
 
@@ -685,6 +752,7 @@ class Camera {
     apply(ctx, canvasWidth, canvasHeight, zoom) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(zoom, zoom);
+        // Центрирование камеры с учетом зума
         ctx.translate(canvasWidth / 2 / zoom, canvasHeight / 2 / zoom);
         ctx.translate(-this.x, -this.y);
     }
@@ -712,6 +780,7 @@ class Player extends Entity {
         super(0, 0, 25);
         this.maxHp = initialHP;
         this.hp = initialHP;
+        this.baseSpeed = 5;
         this.speed = 5;
         this.hasPhone = false;
         this.battery = 100;
@@ -719,9 +788,31 @@ class Player extends Entity {
         this.swingTimer = 0;
         this.shootTimer = 0;
         this.aimAngle = 0;
+        
+        // ТАЙМЕРЫ БАФФОВ (в кадрах, 60 кадров = 1 сек)
+        this.speedBuffTimer = 0;
+        this.multiShotTimer = 0;
+        this.damageBuffTimer = 0;
+        this.shieldBuffTimer = 0;
     }
     
     update(walls) {
+        // РАСЧЕТ СКОРОСТИ С УЧЕТОМ БАФФОВ
+        let currentSpeed = this.baseSpeed;
+        if (Input.isMobile) currentSpeed /= 1.5;
+        
+        if (this.speedBuffTimer > 0) {
+            currentSpeed *= 1.6; // +60% скорости
+            this.speedBuffTimer--;
+            if (this.speedBuffTimer % 10 === 0) Game.createParticles(this.x, this.y, 2, '#3498db');
+        }
+        
+        this.speed = currentSpeed;
+        
+        if (this.multiShotTimer > 0) this.multiShotTimer--;
+        if (this.damageBuffTimer > 0) this.damageBuffTimer--;
+        if (this.shieldBuffTimer > 0) this.shieldBuffTimer--;
+        
         let dx = 0, dy = 0;
         
         if (Input.isMobile) {
@@ -765,10 +856,19 @@ class Player extends Entity {
                 }
             });
             
+            if (Game.boss && !Game.bossDefeated) {
+                let bossDist = Math.hypot(Game.boss.x - this.x, Game.boss.y - this.y);
+                if (bossDist < minDist) {
+                    closestEnemy = Game.boss;
+                }
+            }
+            
             if (closestEnemy) {
                 this.aimAngle = Math.atan2(closestEnemy.y - this.y, closestEnemy.x - this.x);
             } else {
-                this.aimAngle = 0;
+                if (dx !== 0 || dy !== 0) {
+                    this.aimAngle = Math.atan2(dy, dx);
+                }
             }
         } else if (isAttacking) {
             const scale = Game.mobileZoomFactor;
@@ -797,40 +897,65 @@ class Player extends Entity {
     }
 
     attack(type) {
-        if (type === 'SWING') {
-            if (this.swingTimer === 0) {
-                this.swingTimer = 20;
-                Game.createParticles(this.x, this.y, 10, '#fff');
-            }
-        } else if (type === 'SHOOT') {
-            if (this.shootTimer > 0) return;
-            this.shootTimer = 12;
+        const cooldown = type === 'SHOOT' ? 10 : 15;
+        if (this.shootTimer > 0) return;
+        this.shootTimer = cooldown;
+
+        if (type === 'SHOOT') {
+            if (this.battery < 5) return;
+            this.battery -= 5;
             
-            let content = "мне похуй";
-            let bType = 'TEXT';
+            let damageMultiplier = this.damageBuffTimer > 0 ? 2 : 1;
             
-            if (Game.currentAct === 3) {
-                content = '🔋';
-                bType = 'EMOJI';
-                this.battery -= 1.5;
-                if (this.battery < 0) this.battery = 0;
+            if (this.multiShotTimer > 0) {
+                const spread = 0.4;
+                for (let i = -1; i <= 1; i++) {
+                    Game.bullets.push(new Bullet(
+                        this.x, 
+                        this.y, 
+                        this.aimAngle + i * spread, 
+                        true, 
+                        'EMOJI', 
+                        damageMultiplier === 2 ? '🔥' : '💬'
+                    ));
+                }
             } else {
-                let phrases = ["мне похуй", "он удобный", "компакт топ", "заткнись"];
-                content = phrases[Math.floor(Math.random() * phrases.length)];
+                Game.bullets.push(new Bullet(
+                    this.x, 
+                    this.y, 
+                    this.aimAngle, 
+                    true, 
+                    'EMOJI', 
+                    damageMultiplier === 2 ? '🔥' : '💬'
+                ));
             }
-            
-            Game.bullets.push(new Bullet(this.x, this.y, this.aimAngle, true, bType, content));
+        } else if (type === 'SWING') {
+            this.swingTimer = 10;
+            Game.cam.shake = 3;
+            Game.createParticles(this.x + Math.cos(this.aimAngle) * 50, this.y + Math.sin(this.aimAngle) * 50, 10, '#f1c40f');
         }
     }
-    
-    hit(dmg) {
+
+    hit(damage) {
         if (this.invuln > 0) return;
-        this.hp -= dmg;
+        if (this.shieldBuffTimer > 0) {
+            this.shieldBuffTimer = 0;
+            Game.cam.shake = 5;
+            Game.createParticles(this.x, this.y, 10, '#3498db');
+            Game.updateHUD();
+            return;
+        }
+        
+        this.hp -= damage;
         this.invuln = 60;
-        Game.cam.shake = 10;
+        Game.cam.shake = 8;
         Game.updateHUD();
         Game.createParticles(this.x, this.y, 15, '#e74c3c');
         if (this.hp <= 0) Game.gameOver();
+    }
+    
+    draw(ctx) {
+        // перенесено в Game.draw для правильной обработки наложения
     }
 }
 
@@ -851,8 +976,10 @@ class Enemy extends Entity {
             let speed = 4;
             let mx = Math.cos(angle) * speed;
             let my = Math.sin(angle) * speed;
+            
             if (!this.checkWall(this.x + mx, this.y, walls)) this.x += mx;
             if (!this.checkWall(this.x, this.y + my, walls)) this.y += my;
+
             if (dist < this.size + player.size && player.invuln === 0) {
                 player.hit(1);
             }
@@ -867,111 +994,230 @@ class Enemy extends Entity {
             }
             
             this.actionTimer--;
-            if (this.actionTimer <= 0) {
-                this.actionTimer = 80 + Math.random() * 60;
-                let phrases = ["12 мини отстой", "ода рефка", "бери про", "откат"];
-                let txt = phrases[Math.floor(Math.random() * phrases.length)];
-                Game.bullets.push(new Bullet(this.x, this.y, angle, false, 'TEXT', txt));
+            if (this.actionTimer <= 0 && dist < 700) {
+                this.actionTimer = 60 + Math.random() * 60;
+                Game.bullets.push(new Bullet(this.x, this.y, angle, false, 'EMOJI', '💩'));
             }
         }
     }
-
+    
     checkWall(x, y, walls) {
         for (let w of walls) {
-            if (x + this.size > w.x && x - this.size < w.x + w.w &&
-                y + this.size > w.y && y - this.size < w.y + w.h) {
+            if (x + this.size/2 > w.x && x - this.size/2 < w.x + w.w &&
+                y + this.size/2 > w.y && y - this.size/2 < w.y + w.h) {
                 return true;
             }
         }
         return false;
     }
     
-    draw(ctx, color='red') {
-        if (this.img && this.img.complete && this.img.naturalWidth > 0) {
-            let w = this.size * 2;
-            let h = (this.img.height / this.img.width) * w;
-            ctx.drawImage(this.img, -w/2, -h/2, w, h);
-        } else {
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(0, 0, this.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.font = '40px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('😈', 0, 15);
+    hit(damage) {
+        this.hp -= damage;
+        Game.cam.shake = 3;
+        Game.createParticles(this.x, this.y, 5, '#e74c3c');
+        if (this.hp <= 0) {
+            this.markedForDeletion = true;
+            Game.score++;
+            Game.flags.act1Kills++;
+            Game.createParticles(this.x, this.y, 15, '#f1c40f');
+            
+            if (Math.random() < 0.2) { // 20% шанс на спавн баффа
+                Game.spawnBuff(this.x, this.y);
+            }
         }
     }
 }
 
 class Boss extends Entity {
     constructor(x, y) {
-        super(x, y, 80);
-        this.hp = 200;
-        this.maxHp = 200;
+        super(x, y, 70);
+        this.maxHp = 1000;
+        this.hp = 1000;
         this.timer = 0;
-        this.attackPattern = 0;
+        this.phase = 1;
+        this.isEnraged = false;
+        this.originalY = y;
+        this.attackCooldown = 0;
+        this.teleportCooldown = 0;
+        this.appleEventActive = false;
+        this.appleEventTimer = 0;
     }
     
-    update() {
-        this.timer++;
-        this.y += Math.sin(this.timer * 0.05) * 2;
-        
-        if (this.timer % 90 === 0) {
-            this.attackPattern = (this.attackPattern + 1) % 3;
-            this.attack();
-        }
-        
-        if (this.hp <= 0 && Game.state === 'PLAYING') {
-            Game.state = 'EPILOGUE';
-            Game.epilogueTimer = 0;
-            document.getElementById('ui-layer').style.display = 'none';
-            Game.createParticles(this.x, this.y, 30, '#f1c40f');
-            // КРИТИЧНО: Удаляем босса из игры
-            Game.boss = null;
-        }
-    }
-    
-    attack() {
+    hit(damage) {
+        this.hp -= damage;
         Game.cam.shake = 5;
-        
-        if (this.attackPattern === 0) {
-            // Веер из 9 айфонов
-            let count = 9;
-            let startAngle = Math.atan2(Game.player.y - this.y, Game.player.x - this.x) - 0.7;
-            let angleSpan = 1.4;
-            let angleInc = angleSpan / (count - 1);
-            
-            for (let i = 0; i < count; i++) {
-                Game.bullets.push(new Bullet(
-                    this.x, this.y,
-                    startAngle + i * angleInc,
-                    false, 'EMOJI', '📱'
-                ));
-            }
-        } else if (this.attackPattern === 1) {
-            // Спираль
-            for (let i = 0; i < 8; i++) {
-                let angle = (Math.PI * 2 / 8) * i + this.timer * 0.1;
-                Game.bullets.push(new Bullet(
-                    this.x, this.y,
-                    angle,
-                    false, 'EMOJI', '📱'
-                ));
+        Game.updateHUD();
+        Game.createParticles(this.x, this.y, 10, '#e74c3c');
+
+        if (this.hp <= 0 && !Game.bossDefeated) {
+            Game.bossDefeated = true;
+            Game.cam.shake = 30;
+            Game.createParticles(this.x, this.y, 100, '#0f0');
+            Game.dialogue([
+                {n: "ТИМ КУК", t: "Нет... не может быть... Мини... Ты победил компактностью! Но помни... инновации... неизбежны..."},
+                {n: "YSKA69", t: "Иногда лучшее — враг хорошего."},
+                {n: "СИСТЕМА", t: "ПОБЕДА. Эпоха компактности продлена."}
+            ]);
+            setTimeout(() => Game.startEpilogue(), 5000);
+        }
+    }
+    
+    updatePhase() {
+        const hpPercent = (this.hp / this.maxHp) * 100;
+
+        if (hpPercent > 70) { 
+            this.phase = 1; 
+        } else if (hpPercent > 40) {
+            if (this.phase === 1) {
+                this.phase = 2;
+                Game.cam.shake = 15;
+                Game.createParticles(this.x, this.y, 30, '#f39c12');
+                Game.dialogue([{n: "ТИМ КУК", t: "Думаешь, это всё? Я только начинаю!"}]);
             }
         } else {
-            // Целенаправленная атака
-            let angle = Math.atan2(Game.player.y - this.y, Game.player.x - this.x);
-            for (let i = 0; i < 5; i++) {
-                setTimeout(() => {
-                    if (Game.boss && Game.state === 'PLAYING') {
-                        Game.bullets.push(new Bullet(
-                            this.x, this.y,
-                            angle + (Math.random() - 0.5) * 0.3,
-                            false, 'EMOJI', '📱'
-                        ));
-                    }
-                }, i * 100);
+            if (this.phase === 2) {
+                this.phase = 3;
+                this.isEnraged = true;
+                Game.cam.shake = 20;
+                Game.createParticles(this.x, this.y, 50, '#e74c3c');
+                Game.dialogue([{n: "ТИМ КУК", t: "ХВАТИТ! Познай истинную силу Apple!"}]);
             }
+        }
+
+        const phaseEl = document.getElementById('boss-phase');
+        if (phaseEl) {
+            const phaseNames = ['', 'ФАЗА 1 - Презентация', 'ФАЗА 2 - Дебют', 'ФАЗА 3 - ЯРОСТЬ'];
+            phaseEl.innerText = phaseNames[this.phase];
+            phaseEl.style.color = this.phase === 3 ? '#e74c3c' : '#f39c12';
+        }
+    }
+
+    update() {
+        if (Game.bossDefeated) return;
+        this.timer++;
+        this.updatePhase();
+        this.y = this.originalY + Math.sin(this.timer * 0.05) * 20;
+
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        if (this.teleportCooldown > 0) this.teleportCooldown--;
+
+        // --- ОБНОВЛЕННЫЙ ФРАГМЕНТ: ИНТЕРВАЛ "APPLE EVENT" (СТРОКИ 745-756) ---
+        if (this.appleEventActive) {
+            this.appleEventTimer--;
+            if (this.appleEventTimer <= 0) {
+                this.appleEventActive = false;
+                document.getElementById('boss-warning').style.display = 'none';
+            } else {
+                // ИЗМЕНЕНИЕ: Увеличили интервал с 15 до 40 кадров.
+                // Теперь волны падают реже, давая "окна" для спасения.
+                if (this.timer % 40 === 0) {
+                    this.spawnIPhoneRain();
+                }
+            }
+            return;
+        }
+
+        // ОСНОВНОЕ ПОВЕДЕНИЕ
+        if (this.attackCooldown <= 0) {
+            if (this.phase === 1) {
+                this.attackCooldown = 90;
+                if (Math.random() < 0.4) this.shootPlayer(3, 0.5); // Случайный залп
+                else this.shootPlayer(1, 0); // Одиночный выстрел
+            } else if (this.phase === 2) {
+                this.attackCooldown = 75;
+                if (this.timer % 180 === 0) this.startAppleEvent(); // Apple Event раз в 3 секунды
+                else if (Math.random() < 0.5) this.shootPlayer(5, 0.8);
+                else this.shootFan(7);
+            } else if (this.phase === 3) {
+                this.attackCooldown = 60;
+                if (this.timer % 120 === 0) this.startAppleEvent(); // Apple Event чаще
+                else if (Math.random() < 0.6) this.shootPlayer(7, 1);
+                else this.shootFan(10);
+            }
+        }
+        
+        if (this.teleportCooldown <= 0 && this.phase >= 2) {
+            this.teleportCooldown = 240;
+            this.teleport();
+        }
+    }
+
+    shootPlayer(count, spread) {
+        if (Game.bossDefeated) return;
+        let baseAngle = Math.atan2(Game.player.y - this.y, Game.player.x - this.x);
+        for (let i = 0; i < count; i++) {
+            let angle = baseAngle + (Math.random() - 0.5) * spread;
+            Game.bullets.push(new Bullet(this.x, this.y, angle, false, 'BOSS_IPHONE', Assets.getRandomBossProjectileKey()));
+        }
+    }
+
+    shootFan(count) {
+        if (Game.bossDefeated) return;
+        const totalSpread = Math.PI * 1.5;
+        const startAngle = Math.random() * Math.PI * 2;
+        for (let i = 0; i < count; i++) {
+            const angle = startAngle - (totalSpread / 2) + (totalSpread / (count - 1)) * i;
+            Game.bullets.push(new Bullet(this.x, this.y, angle, false, 'BOSS_IPHONE', Assets.getRandomBossProjectileKey()));
+        }
+    }
+
+    teleport() {
+        if (Game.bossDefeated) return;
+        Game.createParticles(this.x, this.y, 20, '#9b59b6');
+        
+        let angle = Math.random() * Math.PI * 2;
+        let distance = 300 + Math.random() * 200;
+        this.x = Game.player.x + Math.cos(angle) * distance;
+        this.y = Game.player.y + Math.sin(angle) * distance;
+        
+        this.originalY = this.y;
+        
+        // Ограничение области
+        this.x = Math.max(-800, Math.min(800, this.x));
+        this.y = Math.max(-600, Math.min(200, this.y));
+        this.originalY = this.y;
+        
+        Game.createParticles(this.x, this.y, 20, '#9b59b6');
+        Game.cam.shake = 5;
+    }
+
+    startAppleEvent() {
+        if (Game.bossDefeated) return;
+        this.appleEventActive = true;
+        this.appleEventTimer = 180;
+        const warning = document.getElementById('boss-warning');
+        warning.style.display = 'block';
+        Game.cam.shake = 15;
+        Game.dialogue([{n: "ТИМ КУК", t: "ONE MORE THING..."}]);
+    }
+    
+    // --- ОБНОВЛЕННЫЙ МЕТОД: NERF "APPLE EVENT" (СТРОКИ 818-836) ---
+    spawnIPhoneRain() {
+        if (Game.bossDefeated) return;
+        
+        // ИЗМЕНЕНИЕ 1: Снизили количество айфонов за раз с 3 до 2
+        for (let i = 0; i < 2; i++) {
+            // ИЗМЕНЕНИЕ 2: Увеличили разброс (800 вместо 600), чтобы не всё летело кучей в игрока
+            let spawnX = Game.player.x + (Math.random() - 0.5) * 800;
+            // Спавним чуть выше (500), чтобы было больше времени среагировать
+            let spawnY = Game.player.y - 500; 
+            
+            let bullet = new Bullet(
+                spawnX, 
+                spawnY, 
+                Math.PI / 2 + (Math.random() - 0.5) * 0.2, // Угол почти вертикально вниз
+                false, 
+                'BOSS_IPHONE', 
+                Assets.getRandomBossProjectileKey()
+            );
+
+            // ИЗМЕНЕНИЕ 3: ЖЕСТКИЙ НЕРФ СКОРОСТИ
+            // Стандартная скорость 9. Умножаем на 0.6, чтобы получить скорость ~5.4.
+            // Теперь от них реально увернуться, если двигаться.
+            bullet.vx *= 0.6;
+            bullet.vy *= 0.6;
+            
+            Game.bullets.push(bullet);
         }
     }
 }
@@ -979,132 +1225,264 @@ class Boss extends Entity {
 class Bullet extends Entity {
     constructor(x, y, angle, isPlayer, type, content) {
         super(x, y, 15);
-        this.vx = Math.cos(angle) * 9;
-        this.vy = Math.sin(angle) * 9;
+        
+        // --- НАЧАЛО ИЗМЕНЕНИЙ (СКОРОСТЬ ПУЛЬ) ---
+        // Базовая скорость пули на ПК - 9.
+        let speed = 9;
+
+        // Если играем с телефона, замедляем ВСЕ пули (и игрока, и врагов).
+        // Это нужно, потому что управление пальцем менее точное, 
+        // а сам персонаж на телефоне тоже двигается медленнее.
+        if (Input.isMobile) {
+            speed = 6; // Снижаем скорость на 33%, чтобы было честно
+        }
+
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        // --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
         this.isPlayer = isPlayer;
         this.type = type;
         this.content = content;
         this.life = 100;
+        this.angle = angle;
     }
-    
+
     update() {
         this.x += this.vx;
         this.y += this.vy;
         this.life--;
         if (this.life <= 0) this.markedForDeletion = true;
     }
+    
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        if (this.type === 'BOSS_IPHONE') {
+            ctx.rotate(this.life * 0.1);
+            const img = Assets.images[this.content];
+            if (img && img.complete && img.naturalWidth > 0) {
+                let w = 40;
+                let h = (img.height / img.width) * w;
+                ctx.drawImage(img, -w/2, -h/2, w, h);
+            } else {
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('📱', 0, 10);
+            }
+        } else if (this.type === 'IMAGE' || this.type === 'EMOJI') {
+            ctx.rotate(this.life * 0.1);
+            ctx.fillStyle = this.isPlayer ? '#3498db' : '#e74c3c';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(this.content, 0, 10);
+        } else {
+            ctx.fillStyle = this.isPlayer ? (this.isSuper ? '#f1c40f' : '#3498db') : '#e74c3c';
+            this.size = 10;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
 }
 
 class Pickup extends Entity {
-    constructor(x, y) {
+    constructor(x, y, type) {
         super(x, y, 20);
+        this.type = type;
+        this.vy = -3;
+        this.life = 300;
+        this.content = this.type === 'HEALTH' ? '❤️' : (this.type === 'BATTERY' ? '🔋' : '❓');
+    }
+
+    update(player) {
+        this.vy += 0.2;
+        this.y += this.vy;
+        this.vy *= 0.95;
+        this.x += Math.sin(this.life / 10) * 0.5;
+
+        this.life--;
+        if (this.life <= 0) this.markedForDeletion = true;
+
+        if (Math.hypot(player.x - this.x, player.y - this.y) < this.size + player.size) {
+            this.markedForDeletion = true;
+            Game.cam.shake = 3;
+            Game.createParticles(this.x, this.y, 5, '#0f0');
+            
+            if (this.type === 'HEALTH' && player.hp < player.maxHp) {
+                player.hp++;
+            } else if (this.type === 'BATTERY') {
+                player.battery = Math.min(100, player.battery + 25);
+            }
+            Game.updateHUD();
+        }
+    }
+    
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.font = '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.content, 0, 10);
+        ctx.restore();
+    }
+}
+
+class Buff extends Entity {
+    constructor(x, y, buffType) {
+        super(x, y, 25);
+        this.buffType = buffType;
+        this.assetsMap = {
+            'HEAL': { key: 'buff_heal', emoji: '💚' },
+            'SPEED': { key: 'buff_speed', emoji: '⚡' },
+            'MULTI': { key: 'buff_multishot', emoji: '💥' },
+            'SHIELD': { key: 'buff_shield', emoji: '🛡️' },
+            'DAMAGE': { key: 'buff_damage', emoji: '🔥' }
+        };
     }
     
     update(player) {
-        if (Math.hypot(player.x - this.x, player.y - this.y) < 40) {
-            if (player.hp < player.maxHp) {
-                player.hp++;
-                Game.updateHUD();
-                this.markedForDeletion = true;
-                Game.createParticles(this.x, this.y, 10, '#e74c3c');
-            }
+        if (Math.hypot(player.x - this.x, player.y - this.y) < this.size + player.size) {
+            this.markedForDeletion = true;
+            Game.cam.shake = 5;
+            Game.createParticles(this.x, this.y, 10, '#f1c40f');
+            this.applyBuff(player);
         }
     }
+
+    applyBuff(player) {
+        const DURATION = 600;
+        switch(this.buffType) {
+            case 'HEAL':
+                if (player.hp < player.maxHp) player.hp++;
+                Game.updateHUD();
+                break;
+            case 'SPEED':
+                player.speedBuffTimer = DURATION;
+                break;
+            case 'MULTI':
+                player.multiShotTimer = DURATION;
+                break;
+            case 'SHIELD':
+                player.shieldBuffTimer = DURATION;
+                break;
+            case 'DAMAGE':
+                player.damageBuffTimer = DURATION;
+                break;
+        }
+    }
+    
+    draw(ctx) {
+        const info = this.assetsMap[this.buffType];
+        const img = Assets.images[info.key];
+
+        // Пульсация
+        const scale = 1 + Math.sin(Date.now() / 200) * 0.1;
+        
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(scale, scale);
+
+        if (img && img.complete && img.naturalWidth > 0) {
+            let w = 50;
+            let h = (img.height / img.width) * w;
+            ctx.drawImage(img, -w/2, -h/2, w, h);
+        } else {
+            // Фолбэк на эмодзи и кружок
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 25, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.stroke();
+
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(info.emoji, 0, 2);
+        }
+        ctx.restore();
+    }
 }
+
 
 // === GAME ENGINE ===
 const Game = {
     canvas: document.getElementById('gameCanvas'),
     ctx: document.getElementById('gameCanvas').getContext('2d'),
-    state: 'MENU',
-    mode: 'STORY',
-    currentAct: 1,
-    initialHP: 3,
-    player: null,
+    state: 'MENU', // MENU, PLAYING, DIALOGUE, GAMEOVER, EPILOGUE
     cam: new Camera(),
-    walls: [],
+    player: null,
     enemies: [],
     bullets: [],
-    pickups: [],
-    props: [],
-    boss: null,
     particles: [],
+    pickups: [],
+    buffs: [],
+    props: [],
+    walls: [],
+    boss: null,
+    bossDefeated: false,
     score: 0,
-    flags: { act1Kills: 0, hasDnsPhone: false, readyToThrow: false },
+    currentAct: 0, // 1, 2, 3
+    initialHP: 3,
+    mobileZoomFactor: 1,
     
-    mobileZoomFactor: 1.0,
-    
+    flags: {
+        act1Kills: 0,
+        hasDnsPhone: false,
+        readyToThrow: false
+    },
+
     init: function() {
-        this.mobileZoomFactor = Input.isMobile ? 0.6 : 1.0;
-        
-        this.resize();
-        window.addEventListener('resize', () => this.resize());
-        
         Assets.loadAll();
         Input.init();
-        this.setupEventListeners();
-        this.setDifficulty('NORMAL');
-        
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        this.setupMenu();
         this.loop();
     },
-    
+
     resize: function() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
-    },
-    
-    setupEventListeners: function() {
-        const addHandler = (id, handler) => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                handler();
-            });
-            
-            el.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                handler();
-            }, {passive: false});
-        };
         
-        addHandler('btn-easy-menu', () => this.setDifficulty('EASY'));
-        addHandler('btn-normal-menu', () => this.setDifficulty('NORMAL'));
-        addHandler('btn-hard-menu', () => this.setDifficulty('HARD'));
-        addHandler('btn-story', () => this.start('STORY'));
-        addHandler('btn-infinity', () => this.start('INFINITY'));
-        addHandler('dialogue-btn', () => {
-            if (this.state === 'DIALOGUE') this.advanceDialogue();
-        });
-    },
-
-    setDifficulty: function(level) {
-        document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
-        
-        if (level === 'EASY') {
-            this.initialHP = 5;
-            document.getElementById('btn-easy-menu').classList.add('active');
-        } else if (level === 'NORMAL') {
-            this.initialHP = 3;
-            document.getElementById('btn-normal-menu').classList.add('active');
-        } else if (level === 'HARD') {
-            this.initialHP = 1;
-            document.getElementById('btn-hard-menu').classList.add('active');
+        if (Input.isMobile) {
+            this.mobileZoomFactor = Math.min(this.canvas.width / 800, this.canvas.height / 800, 1.2);
+            this.mobileZoomFactor = Math.max(0.8, this.mobileZoomFactor);
+        } else {
+            this.mobileZoomFactor = 1;
         }
     },
     
+    setupMenu: function() {
+        document.getElementById('btn-easy-menu').onclick = () => this.setDifficulty(5, 'EASY');
+        document.getElementById('btn-normal-menu').onclick = () => this.setDifficulty(3, 'NORMAL');
+        document.getElementById('btn-hard-menu').onclick = () => this.setDifficulty(1, 'HARD');
+        
+        document.getElementById('btn-story').onclick = () => this.start('STORY');
+        document.getElementById('btn-infinity').onclick = () => this.start('INFINITY');
+    },
+
+    setDifficulty: function(hp, name) {
+        this.initialHP = hp;
+        document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`btn-${name.toLowerCase()}-menu`).classList.add('active');
+    },
+
     start: function(mode) {
         this.mode = mode;
         this.state = 'PLAYING';
         this.player = new Player(this.initialHP);
         this.score = 0;
         this.particles = [];
+        this.buffs = [];
         this.flags = { act1Kills: 0, hasDnsPhone: false, readyToThrow: false };
+        this.bossDefeated = false;
         
-        const menuLayer = document.getElementById('menu-layer');
-        menuLayer.classList.add('hidden');
-        
+        document.getElementById('menu-layer').classList.add('hidden');
         document.getElementById('ui-layer').style.display = 'block';
         document.getElementById('main-hud').style.display = 'flex';
         document.getElementById('boss-ui').style.display = 'none';
@@ -1115,91 +1493,85 @@ const Game = {
             this.startAct1();
         }
     },
-    
+
     createParticles: function(x, y, count, color) {
         for (let i = 0; i < count; i++) {
             let angle = Math.random() * Math.PI * 2;
             let speed = 2 + Math.random() * 4;
-            this.particles.push(new Particle(
-                x, y,
-                Math.cos(angle) * speed,
-                Math.sin(angle) * speed - 2,
-                color,
-                30 + Math.random() * 20
-            ));
+            this.particles.push(new Particle(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed - 2, color, 30 + Math.random() * 20));
         }
     },
-    
+
     startAct1: function() {
         this.currentAct = 1;
         this.walls = [
+            // Границы мира
             {x: -500, y: -500, w: 1000, h: 50},
             {x: -500, y: 450, w: 1000, h: 50},
             {x: -500, y: -500, w: 50, h: 1000},
-            {x: 450, y: -500, w: 50, h: 1000}
+            {x: 450, y: -500, w: 50, h: 1000},
+            // Препятствия
+            {x: -300, y: -300, w: 100, h: 100},
+            {x: 200, y: 0, w: 150, h: 50},
+            {x: -150, y: 250, w: 50, h: 100}
         ];
         this.enemies = [];
-        this.bullets = [];
         this.pickups = [];
+        this.buffs = [];
         this.props = [];
         this.player.x = 0;
         this.player.y = 0;
         
         this.dialogue([
-            {n: "YSKA69", t: "Я должен купить iPhone 12 Mini."},
-            {n: "ЧАТ", t: "Ода рефка! Бери лопату!"},
-            {n: "ЗАДАЧА", t: "Уничтожьте 20 ТечТокеров."}
+            {n: "СИСТЕМА", t: "Акт 1: Загрузка в iOS 17.5. Цель: Выжить 20 циклов. (Кнопки WASD/Стрелки + SPACE/ЛКМ)"},
+            {n: "YSKA69", t: "12 Mini... держись. Я спасу тебя!"}
         ]);
+        
+        document.getElementById('ammo-display').style.display = 'none';
+        document.getElementById('score-display').style.display = 'block';
     },
-    
+
     startAct2: function() {
         this.currentAct = 2;
+        const mapSize = 1200;
+        const mallMin = -600;
+        const mallMax = 600;
         this.player.x = 0;
         this.player.y = 0;
         this.enemies = [];
         this.bullets = [];
         this.pickups = [];
-        this.generateMall();
-        
-        this.dialogue([
-            {n: "СИСТЕМА", t: "АКТ II: ТЦ 'ЭМПОРИУМ'"},
-            {n: "ЗАДАЧА", t: "Заберите свой 12 Mini в магазине DNS. Сбегите на самокате."}
-        ]);
-    },
-    
-    generateMall: function() {
+        this.buffs = [];
         this.walls = [];
         this.props = [];
         
-        const mallMin = -500;
-        const mallMax = 2000;
-        const mapSize = mallMax - mallMin;
-        const edgePadding = 400;
-
-        const randomCoord = () => mallMin + edgePadding + Math.random() * (mapSize - 2 * edgePadding);
-
-        for (let i = 0; i < 6; i++) {
-            for (let j = 0; j < 6; j++) {
-                let wx = i * 350 + mallMin;
-                let wy = j * 350 + mallMin;
-                
-                if (Math.random() > 0.6) {
-                    this.walls.push({x: wx, y: wy, w: 20, h: 250});
-                    this.walls.push({x: wx, y: wy, w: 250, h: 20});
-                } else if (Math.random() > 0.4) {
-                    this.props.push({type: 'DECOR', x: wx + 100, y: wy + 100});
-                    this.walls.push({x: wx + 80, y: wy + 80, w: 40, h: 40});
-                }
+        const randomCoord = () => mallMin + 100 + Math.random() * (mapSize - 200);
+        
+        // Создаем стены-столбы
+        for (let i = 0; i < 15; i++) {
+            let wx = randomCoord();
+            let wy = randomCoord();
+            let type = Math.random() < 0.5 ? 'SCOOTER' : 'CAR';
+            this.walls.push({x: wx, y: wy, w: 50, h: 50});
+            if (Math.random() < 0.3) {
+                this.walls.push({x: wx + 80, y: wy + 80, w: 40, h: 40});
             }
         }
         
         this.props.push({type: 'DNS_STORE', x: randomCoord(), y: randomCoord()});
         this.props.push({type: 'SCOOTER', x: randomCoord(), y: randomCoord()});
 
+        // Границы ТЦ
         this.walls.push({x: mallMin, y: mallMin, w: mapSize, h: 50});
         this.walls.push({x: mallMin, y: mallMax, w: mapSize, h: 50});
         this.walls.push({x: mallMin, y: mallMin, w: 50, h: mapSize + 50});
         this.walls.push({x: mallMax, y: mallMin, w: 50, h: mapSize + 50});
+
+        this.dialogue([
+            {n: "СИСТЕМА", t: "Акт 2: ТЦ. Цель: Найти и экипировать 'Анти-Телефоны' DNS."},
+            {n: "YSKA69", t: "Надо найти что-то, чем можно отбиваться, пока батарея не сядет. Кажется, тут есть DNS..."},
+            {n: "СИСТЕМА", t: "Теперь вы наносите урон только ближним боем (клавиша SPACE/ЛКМ + E) на месте DNS."},
+        ]);
     },
     
     startAct3: function() {
@@ -1209,8 +1581,11 @@ const Game = {
         this.walls = [];
         this.enemies = [];
         this.props = [];
-        this.boss = new Boss(0, -200);
+        this.bossDefeated = false;
         
+        this.boss = new Boss(0, -200);
+        this.player.battery = 100;
+
         document.getElementById('boss-ui').style.display = 'block';
         document.getElementById('ammo-display').style.display = 'block';
         
@@ -1219,74 +1594,98 @@ const Game = {
             {n: "YSKA69", t: "Компактность — это свобода."}
         ]);
     },
-    
+
     startInfinity: function() {
         this.currentAct = 999;
         this.walls = [];
         this.enemies = [];
+        this.buffs = [];
         this.player.x = 0;
         this.player.y = 0;
+        this.player.battery = 100;
         
         document.getElementById('score-display').style.display = 'block';
-        document.getElementById('ammo-display').style.display = 'none';
-        this.player.hasPhone = false;
-        this.player.battery = 100;
-    },
-    
-    loop: function() {
-        this.update();
-        this.draw();
-        requestAnimationFrame(() => this.loop());
-    },
-    
-    update: function() {
-        if (this.state === 'MENU' || this.state === 'GAMEOVER') return;
-        if (this.state !== 'PLAYING' && this.state !== 'EPILOGUE') return;
+        document.getElementById('ammo-display').style.display = 'block';
         
-        if (this.player) {
-            this.cam.update(this.player);
-            this.player.update(this.walls);
-        }
+        this.dialogue([
+            {n: "СИСТЕМА", t: "БЕСКОНЕЧНОСТЬ: Выживание в сети. Удачи."}
+        ]);
+    },
+
+    loop: function() {
+        requestAnimationFrame(() => this.loop());
         
         if (this.state === 'PLAYING') {
-            if (this.currentAct === 1 && this.enemies.length < 5 && (this.flags.act1Kills + this.enemies.length < 20)) {
-                if (Math.random() < 0.02) this.spawnEnemy('RANGED');
+            this.update();
+            this.draw();
+        } else if (this.state === 'DIALOGUE' || this.state === 'GAMEOVER') {
+            this.draw(); // Перерисовываем для фона
+        } else if (this.state === 'EPILOGUE') {
+            this.draw();
+        } else if (this.state === 'MENU') {
+            this.draw();
+        }
+    },
+
+    update: function() {
+        this.player.update(this.walls);
+        this.cam.update(this.player);
+
+        if (this.currentAct === 1 && this.enemies.length < 5 + Math.floor(this.flags.act1Kills / 5) && this.flags.act1Kills < 20) {
+            if (this.player.x !== 0 || this.player.y !== 0) { // Не спавним, пока игрок не двигался
+                this.spawnEnemy('RANGED');
             }
-            
-            if (this.currentAct === 2 && this.flags.hasDnsPhone && this.enemies.length < 25) {
-                if (Math.random() < 0.1) this.spawnEnemy('MELEE');
+        } else if (this.currentAct === 2) {
+            if (this.enemies.length < 10) {
+                this.spawnEnemy(Math.random() < 0.5 ? 'MELEE' : 'RANGED');
             }
-            
-            if (this.currentAct === 999 && this.enemies.length < 20 + this.score / 10) {
-                if (Math.random() < 0.05) this.spawnEnemy(Math.random() > 0.5 ? 'RANGED' : 'MELEE');
+        } else if (this.currentAct === 999) {
+            if (this.enemies.length < 5 + Math.floor(this.score / 10)) {
+                this.spawnEnemy(Math.random() < 0.5 ? 'MELEE' : 'RANGED');
+            }
+            if (Math.random() < 0.005) {
+                this.spawnPickup(this.player.x + (Math.random() - 0.5) * 500, this.player.y + (Math.random() - 0.5) * 500, Math.random() < 0.5 ? 'HEALTH' : 'BATTERY');
+            }
+            if (Math.random() < 0.003) {
+                const types = ['SPEED', 'MULTI', 'SHIELD', 'DAMAGE'];
+                const type = types[Math.floor(Math.random() * types.length)];
+                let angle = Math.random() * Math.PI * 2;
+                let dist = 300 + Math.random() * 200;
+                let bx = this.player.x + Math.cos(angle) * dist;
+                let by = this.player.y + Math.sin(angle) * dist;
+                this.buffs.push(new Buff(bx, by, type));
             }
         }
-        
+
         this.enemies.forEach(e => e.update(this.player, this.walls));
         this.bullets.forEach(b => b.update());
         this.pickups.forEach(p => p.update(this.player));
-        if (this.boss) this.boss.update();
-        
+        this.buffs.forEach(b => b.update(this.player)); // Обновляем баффы
+
+        if (this.boss && !this.bossDefeated) {
+            this.boss.update();
+        }
+
         this.particles.forEach(p => p.update());
+
         this.particles = this.particles.filter(p => p.life > 0);
-        
         this.handleCollisions();
         this.checkObjectives();
-        
+
         this.enemies = this.enemies.filter(e => !e.markedForDeletion);
         this.bullets = this.bullets.filter(b => !b.markedForDeletion);
         this.pickups = this.pickups.filter(p => !p.markedForDeletion);
+        this.buffs = this.buffs.filter(b => !b.markedForDeletion);
         this.props = this.props.filter(p => !p.markedForDeletion);
     },
-    
+
     spawnEnemy: function(type) {
         let ex, ey, dist;
         let safeDist = 300;
-
+        
         if (this.currentAct === 1) {
             const boxMin = -450;
             const boxMax = 450;
-            
             do {
                 ex = boxMin + Math.random() * (boxMax - boxMin);
                 ey = boxMin + Math.random() * (boxMax - boxMin);
@@ -1294,72 +1693,81 @@ const Game = {
             } while (dist < safeDist);
             
         } else if (this.currentAct === 2) {
-            const mallMin = -500;
-            const mallMax = 2000;
-            const mapSize = mallMax - mallMin;
-            const edgePadding = 100;
-            
+            const mapSize = 1200;
+            const mallMin = -600;
+            const mallMax = 600;
             do {
-                ex = mallMin + edgePadding + Math.random() * (mapSize - 2 * edgePadding);
-                ey = mallMin + edgePadding + Math.random() * (mapSize - 2 * edgePadding);
+                ex = mallMin + Math.random() * mapSize;
+                ey = mallMin + Math.random() * mapSize;
                 dist = Math.hypot(this.player.x - ex, this.player.y - ey);
             } while (dist < safeDist);
-
-        } else {
-            let angle = Math.random() * Math.PI * 2;
-            let spawnDist = 600;
-            ex = this.player.x + Math.cos(angle) * spawnDist;
-            ey = this.player.y + Math.sin(angle) * spawnDist;
+        } else if (this.currentAct === 999) {
+             do {
+                ex = this.player.x + (Math.random() - 0.5) * 1200;
+                ey = this.player.y + (Math.random() - 0.5) * 1200;
+                dist = Math.hypot(this.player.x - ex, this.player.y - ey);
+            } while (dist < safeDist || dist > 800);
         }
 
-        this.enemies.push(new Enemy(ex, ey, type));
+        if (ex && ey) {
+            this.enemies.push(new Enemy(ex, ey, type));
+        }
     },
-    
+
+    spawnPickup: function(x, y, type) {
+        this.pickups.push(new Pickup(x, y, type));
+    },
+
+    spawnBuff: function(x, y) {
+        const types = ['HEAL', 'SPEED', 'MULTI', 'SHIELD', 'DAMAGE'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        this.buffs.push(new Buff(x, y, type));
+    },
+
     handleCollisions: function() {
-        this.bullets.forEach(b => {
-            if (b.isPlayer) {
-                this.enemies.forEach(e => {
-                    if (Math.hypot(b.x - e.x, b.y - e.y) < e.size + b.size) {
-                        e.hp--;
-                        b.markedForDeletion = true;
-                        this.createParticles(e.x, e.y, 5, '#e74c3c');
-                        
-                        if (e.hp <= 0) {
-                            e.markedForDeletion = true;
-                            this.score++;
-                            if (this.currentAct === 1) this.flags.act1Kills++;
-                            if (this.currentAct !== 1 && Math.random() < 0.1) {
-                                this.pickups.push(new Pickup(e.x, e.y));
-                            }
-                            this.createParticles(e.x, e.y, 15, '#f39c12');
-                        }
+        // Пули игрока против врагов
+        this.bullets.filter(b => b.isPlayer).forEach(b => {
+            let targetList = this.boss && !this.bossDefeated ? [this.boss, ...this.enemies] : this.enemies;
+            targetList.forEach(e => {
+                if (e.markedForDeletion) return;
+                if (Math.hypot(b.x - e.x, b.y - e.y) < e.size + b.size) {
+                    if (e === this.boss) {
+                        e.hit(10); // Урон боссу
+                    } else {
+                        e.hit(this.player.damageBuffTimer > 0 ? 3 : 1); // Урон обычным врагам
                     }
-                });
-                
-                if (this.boss && Math.hypot(b.x - this.boss.x, b.y - this.boss.y) < this.boss.size + 20) {
-                    this.boss.hp--;
-                    b.markedForDeletion = true;
-                    this.cam.shake = 2;
-                    this.createParticles(this.boss.x, this.boss.y, 5, '#f1c40f');
-                }
-            } else {
-                if (Math.hypot(b.x - this.player.x, b.y - this.player.y) < this.player.size) {
-                    this.player.hit(1);
                     b.markedForDeletion = true;
                 }
-            }
+            });
         });
 
+        // Пули врагов против игрока
+        this.bullets.filter(b => !b.isPlayer).forEach(b => {
+            if (this.bossDefeated) { // Не получать урон после победы
+                b.markedForDeletion = true;
+                return;
+            }
+            if (Math.hypot(b.x - this.player.x, b.y - this.player.y) < this.player.size) {
+                this.player.hit(1);
+                b.markedForDeletion = true;
+            }
+        });
+        
+        // Ближний бой (махание палкой DNS)
         if (this.player.swingTimer > 0 && this.currentAct === 2 && this.flags.hasDnsPhone) {
             let range = 110;
-            let arc = 1.2;
+            let arc = 1.2; 
+            
+            // Проверка врагов
             this.enemies.forEach(e => {
                 let dist = Math.hypot(e.x - this.player.x, e.y - this.player.y);
                 if (dist < range) {
                     let angleToEnemy = Math.atan2(e.y - this.player.y, e.x - this.player.x);
                     let angleDiff = angleToEnemy - this.player.aimAngle;
+                    
                     while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
                     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
                     if (Math.abs(angleDiff) < arc / 2) {
                         e.hp -= 10;
                         e.markedForDeletion = true;
@@ -1368,433 +1776,133 @@ const Game = {
                     }
                 }
             });
+            
+            // Проверка возможности броска
+            if (this.flags.readyToThrow && Input.keys.e) {
+                this.flags.readyToThrow = false;
+                this.flags.hasDnsPhone = false;
+                Input.keys.e = false;
+                
+                let throwBullet = new Bullet(
+                    this.player.x, 
+                    this.player.y, 
+                    this.player.aimAngle, 
+                    true, 
+                    'IMAGE', 
+                    'dns_logo'
+                );
+                
+                throwBullet.size = 50;
+                throwBullet.vy *= 2;
+                throwBullet.vx *= 2;
+
+                this.bullets.push(throwBullet);
+
+                this.dialogue([
+                    {n: "YSKA69", t: "На, подавись компактностью!"},
+                    {n: "СИСТЕМА", t: "Бросок. Батарея разряжена. Двигайтесь к выходу."}
+                ]);
+                setTimeout(() => this.startAct3(), 1500);
+            }
         }
     },
-    
+
     checkObjectives: function() {
         let prompt = document.getElementById('interact-prompt');
         prompt.style.display = 'none';
-        
+
+        // АКТ 1
         if (this.currentAct === 1 && this.flags.act1Kills >= 20) {
             this.dialogue([{n: "СИСТЕМА", t: "Чат свернут. Выход в оффлайн..."}]);
             setTimeout(() => this.startAct2(), 2000);
         }
-        
+
+        // АКТ 2
         if (this.currentAct === 2) {
             let dnsStore = this.props.find(p => p.type === 'DNS_STORE');
-            if (dnsStore && !this.flags.hasDnsPhone) {
-                if (Math.hypot(this.player.x - dnsStore.x, this.player.y - dnsStore.y) < 150) {
-                    this.showPrompt(dnsStore.x, dnsStore.y, "ЗАБРАТЬ 12 MINI [E]");
-                    if (Input.keys.e) {
+            
+            if (dnsStore) {
+                if (Math.hypot(this.player.x - dnsStore.x, this.player.y - dnsStore.y) < 200) {
+                    this.showInteractPrompt(dnsStore.x, dnsStore.y, 'E - Взять Анти-Телефоны');
+
+                    if (Input.keys.e && !this.flags.hasDnsPhone) {
                         this.flags.hasDnsPhone = true;
-                        this.player.hasPhone = true;
-                        this.createParticles(dnsStore.x, dnsStore.y, 20, '#3498db');
+                        dnsStore.markedForDeletion = true;
+                        this.player.battery = 100;
+                        Input.keys.e = false;
+                        
                         this.dialogue([
-                            {n: "YSKA69", t: "Наконец-то. Компактность в моих руках!"},
-                            {n: "ЗАДАЧА", t: "Бегите к самокату!"}
+                            {n: "YSKA69", t: "Есть! Два больших, мощных, некомпактных телефона от DNS! Идеальное оружие ближнего боя!"},
+                            {n: "СИСТЕМА", t: "Экипировано: Анти-Телефоны DNS (Ближний бой). Используйте SPACE/ЛКМ для атаки. Активен режим БЕЗ ПУЛЬ (для сохранения энергии)."},
+                            {n: "СИСТЕМА", t: "Цель: Найти выход на улицу (Скутер)."},
                         ]);
                     }
                 }
             }
-            
+
             let scooter = this.props.find(p => p.type === 'SCOOTER');
             if (scooter && this.flags.hasDnsPhone) {
-                if (Math.hypot(this.player.x - scooter.x, this.player.y - scooter.y) < 100) {
-                    this.showPrompt(scooter.x, scooter.y, "УЕХАТЬ [E]");
-                    if (Input.keys.e) {
-                        this.startAct3();
+                if (Math.hypot(this.player.x - scooter.x, this.player.y - scooter.y) < 150) {
+                    this.showInteractPrompt(scooter.x, scooter.y, 'E - Уехать');
+                    
+                    if (Input.keys.e && !this.flags.readyToThrow) {
+                        this.flags.readyToThrow = true;
+                        this.showInteractPrompt(scooter.x, scooter.y, 'E - Бросить Анти-Телефон и Уехать');
+                        this.dialogue([
+                            {n: "СИСТЕМА", t: "Подготовьтесь к броску! Нажмите E + SPACE/ЛКМ, чтобы бросить Анти-Телефон и сбежать от Тима Кука!"}
+                        ]);
                     }
                 }
             }
         }
-        
-        if (this.currentAct === 3) {
-            if (this.player.battery <= 0 && !this.flags.readyToThrow) {
-                this.flags.readyToThrow = true;
-                this.dialogue([{n: "СИСТЕМА", t: "БАТАРЕЯ 0%. НАЖМИТЕ [E] ЧТОБЫ БРОСИТЬ ТЕЛЕФОН!"}]);
-            }
-            if (this.flags.readyToThrow && Input.keys.e) {
-                this.state = 'EPILOGUE';
-                this.epilogueTimer = 0;
-                document.getElementById('ui-layer').style.display = 'none';
-            }
-        }
     },
     
-    showPrompt: function(wx, wy, text) {
+    showInteractPrompt: function(x, y, text) {
         let prompt = document.getElementById('interact-prompt');
         const scale = this.mobileZoomFactor;
-        const screenX = (wx - this.cam.x) * scale + this.canvas.width / 2;
-        const screenY = (wy - this.cam.y) * scale + this.canvas.height / 2;
         
-        prompt.style.left = screenX + 'px';
-        prompt.style.top = screenY - (60 * scale) + 'px';
+        let screenX = (x - this.cam.x) * scale + (this.canvas.width / 2);
+        let screenY = (y - this.cam.y) * scale + (this.canvas.height / 2);
+        
+        prompt.style.left = `${screenX}px`;
+        prompt.style.top = `${screenY}px`;
         prompt.innerText = text;
         prompt.style.display = 'block';
     },
-    
-    draw: function() {
-        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-        this.ctx.fillStyle = '#111';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        if (this.state === 'MENU') {
-            this.drawGrid();
-            return;
-        }
-        
-        if (this.state === 'EPILOGUE') {
-            this.drawEpilogue();
-            return;
-        }
-        
-        this.cam.apply(this.ctx, this.canvas.width, this.canvas.height, this.mobileZoomFactor);
-        
-        if (this.currentAct === 1) {
-            this.drawMatrixBg();
-        } else if (this.currentAct === 2) {
-            this.drawMallFloor();
-        } else if (this.currentAct === 3) {
-            this.drawOfficeBg();
-        } else {
-            this.drawGrid();
-        }
 
-        this.ctx.fillStyle = '#444';
-        this.walls.forEach(w => {
-            this.ctx.fillRect(w.x, w.y, w.w, w.h);
-            this.ctx.strokeStyle = '#666';
-            this.ctx.strokeRect(w.x, w.y, w.w, w.h);
-        });
-        
-        this.props.forEach(p => {
-            this.ctx.save();
-            this.ctx.translate(p.x, p.y);
+    updateHUD: function() {
+        const hpEl = document.getElementById('hp-display');
+        const ammoEl = document.getElementById('ammo-display');
+        const scoreEl = document.getElementById('score-display');
+        const buffsEl = document.getElementById('buffs-display');
+
+        if (this.player) {
+            hpEl.innerText = 'HP: ' + '❤️'.repeat(this.player.hp);
+            ammoEl.innerText = `BATTERY: ${this.player.battery}%`;
+            scoreEl.innerText = `KILLS: ${this.score}`;
             
-            if (p.type === 'DNS_STORE') {
-                this.ctx.fillStyle = '#f39c12';
-                this.ctx.fillRect(-150, -150, 300, 300);
-                this.ctx.fillStyle = '#2c3e50';
-                this.ctx.fillRect(-140, -140, 280, 280);
-                
-                const dnsLogo = Assets.images.dns_logo;
-                if (dnsLogo && dnsLogo.complete && dnsLogo.naturalWidth > 0) {
-                    let logoW = 180;
-                    let logoH = (dnsLogo.height / dnsLogo.width) * logoW;
-                    this.ctx.drawImage(dnsLogo, -logoW/2, -logoH/2, logoW, logoH);
-                } else {
-                    this.ctx.fillStyle = this.flags.hasDnsPhone ? '#27ae60' : '#f1c40f';
-                    this.ctx.font = 'bold 50px Arial';
-                    this.ctx.textAlign = 'center';
-                    this.ctx.fillText('DNS', 0, 15);
-                }
-                
-                if (!this.flags.hasDnsPhone) {
-                    const phoneImg = Assets.images.phone;
-                    if (phoneImg && phoneImg.complete && phoneImg.naturalWidth > 0) {
-                        this.ctx.drawImage(phoneImg, -20, 20, 40, 60);
-                    } else {
-                        this.ctx.fillStyle = 'white';
-                        this.ctx.font = '30px Arial';
-                        this.ctx.fillText('📱', 0, 60);
-                    }
-                }
-            } else if (p.type === 'SCOOTER') {
-                const scooterImg = Assets.images.scooter;
-                if (scooterImg && scooterImg.complete && scooterImg.naturalWidth > 0) {
-                    this.ctx.drawImage(scooterImg, -40, -40, 80, 80);
-                } else {
-                    this.ctx.font = '80px Arial';
-                    this.ctx.textAlign = 'center';
-                    this.ctx.fillText('🛴', 0, 25);
-                }
-            } else if (p.type === 'DECOR') {
-                this.ctx.font = '40px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('🌳', 0, 15);
-            }
-            this.ctx.restore();
-        });
-        
-        this.pickups.forEach(p => {
-            this.ctx.save();
-            this.ctx.translate(p.x, p.y);
+            buffsEl.innerHTML = '';
             
-            const heartImg = Assets.images.heart;
-            if (heartImg && heartImg.complete && heartImg.naturalWidth > 0) {
-                let w = p.size * 2;
-                let h = (heartImg.height / heartImg.width) * w;
-                this.ctx.drawImage(heartImg, -w/2, -h/2, w, h);
-            } else {
-                p.draw(this.ctx, '#e74c3c');
-                this.ctx.font = '30px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('❤️', 0, 10);
-            }
-            this.ctx.restore();
-        });
-        
-        this.enemies.forEach(e => {
-            this.ctx.save();
-            this.ctx.translate(e.x, e.y);
-            e.draw(this.ctx, '#e74c3c');
-            this.ctx.restore();
-        });
+            const buffs = [
+                {timer: this.player.speedBuffTimer, key: 'SPEED', emoji: '⚡'},
+                {timer: this.player.multiShotTimer, key: 'MULTI', emoji: '💥'},
+                {timer: this.player.damageBuffTimer, key: 'DAMAGE', emoji: '🔥'},
+                {timer: this.player.shieldBuffTimer, key: 'SHIELD', emoji: '🛡️'},
+            ];
+            
+            buffs.forEach(buff => {
+                if (buff.timer > 0) {
+                    const time = Math.ceil(buff.timer / 60);
+                    const div = document.createElement('div');
+                    div.className = 'buff-icon';
+                    div.innerHTML = `${buff.emoji} (${time}s)`;
+                    buffsEl.appendChild(div);
+                }
+            });
+        }
         
         if (this.boss) {
-            this.ctx.save();
-            this.ctx.translate(this.boss.x, this.boss.y);
-            
-            const img = Assets.images.tim;
-            if (img && img.complete && img.naturalWidth > 0) {
-                let w = this.boss.size * 2.5;
-                let h = (img.height / img.width) * w;
-                this.ctx.drawImage(img, -w/2, -h/2, w, h);
-            } else {
-                this.boss.draw(this.ctx, 'gray');
-                this.ctx.font = '100px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('🍎', 0, 35);
-            }
-            this.ctx.restore();
-        }
-        
-        if (this.player) {
-            this.ctx.save();
-            this.ctx.translate(this.player.x, this.player.y);
-            
-            if (this.player.invuln > 0 && Math.floor(this.player.invuln / 5) % 2 === 0) {
-                this.ctx.globalAlpha = 0.5;
-            }
-            
-            const heroImg = Assets.images.hero;
-            if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
-                let w = this.player.size * 2;
-                let h = (heroImg.height / heroImg.width) * w;
-                this.ctx.drawImage(heroImg, -w/2, -h/2, w, h);
-            } else {
-                this.player.draw(this.ctx, '#3498db');
-                this.ctx.font = '40px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('😎', 0, 15);
-            }
-            
-            this.ctx.globalAlpha = 1;
-            
-            if (this.player.swingTimer > 0 && this.currentAct === 2 && this.flags.hasDnsPhone) {
-                let range = 110;
-                let arc = 1.2;
-                let startA = this.player.aimAngle - arc / 2;
-                let endA = this.player.aimAngle + arc / 2;
-                
-                this.ctx.beginPath();
-                this.ctx.arc(0, 0, range, startA, endA);
-                this.ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-                this.ctx.lineWidth = 8;
-                this.ctx.stroke();
-
-                this.ctx.save();
-                this.ctx.rotate(this.player.aimAngle);
-                
-                const phoneImg = Assets.images.phone;
-                if (phoneImg && phoneImg.complete && phoneImg.naturalWidth > 0) {
-                    this.ctx.drawImage(phoneImg, range - 45, -25, 50, 50);
-                } else {
-                    this.ctx.font = '50px Arial';
-                    this.ctx.fillText('📱', range - 25, 15);
-                }
-                this.ctx.restore();
-            }
-            this.ctx.restore();
-        }
-        
-        this.bullets.forEach(b => {
-            this.ctx.save();
-            this.ctx.translate(b.x, b.y);
-            
-            if (b.type === 'IMAGE' || b.type === 'EMOJI') {
-                this.ctx.rotate(b.life * 0.1);
-                this.ctx.fillStyle = b.isPlayer ? '#3498db' : '#e74c3c';
-                this.ctx.font = '30px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText(b.content, 0, 10);
-            } else {
-                this.ctx.fillStyle = b.isPlayer ? '#3498db' : '#e74c3c';
-                this.ctx.font = 'bold 16px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText(b.content, 0, 5);
-            }
-            this.ctx.restore();
-        });
-        
-        this.particles.forEach(p => p.draw(this.ctx));
-        
-        this.updateHUD();
-    },
-    
-    drawMatrixBg: function() {
-        this.ctx.fillStyle = '#001000';
-        this.ctx.fillRect(-500, -500, 1000, 1000);
-        this.ctx.fillStyle = '#002200';
-        this.ctx.font = "14px monospace";
-        let sz = 60;
-        for (let x = -500; x < 500; x += sz) {
-            for (let y = -500; y < 500; y += sz) {
-                let char = ((x + y) % 3 === 0) ? "1" : "0";
-                this.ctx.fillText(char, x, y);
-            }
-        }
-    },
-    
-    drawMallFloor: function() {
-        let size = 2500;
-        let min = -500;
-        this.ctx.fillStyle = '#111';
-        this.ctx.fillRect(min, min, size, size);
-        let tileSize = 150;
-        for (let x = min; x < min + size; x += tileSize) {
-            for (let y = min; y < min + size; y += tileSize) {
-                this.ctx.fillStyle = ((Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2 === 0) ? '#4a4a4a' : '#6b6b6b';
-                this.ctx.fillRect(x, y, tileSize, tileSize);
-            }
-        }
-    },
-
-    drawOfficeBg: function() {
-        const officeImg = Assets.images.office;
-        if (officeImg && officeImg.complete && officeImg.naturalWidth > 0) {
-            this.ctx.drawImage(officeImg, -1000, -1000, 2000, 2000);
-        } else {
-            this.ctx.fillStyle = '#2c3e50';
-            this.ctx.fillRect(-1500, -1500, 3000, 3000);
-        }
-    },
-    
-    drawGrid: function() {
-        this.ctx.strokeStyle = '#222';
-        this.ctx.lineWidth = 2;
-        let sz = 100;
-        this.ctx.beginPath();
-        for (let x = -2000; x < 2000; x += sz) {
-            this.ctx.moveTo(x, -2000);
-            this.ctx.lineTo(x, 2000);
-        }
-        for (let y = -2000; y < 2000; y += sz) {
-            this.ctx.moveTo(-2000, y);
-            this.ctx.lineTo(2000, y);
-        }
-        this.ctx.stroke();
-    },
-
-    epilogueTimer: 0,
-    
-    drawEpilogue: function() {
-        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-        this.epilogueTimer++;
-        let t = this.epilogueTimer;
-        
-        if (t < 120) {
-            this.ctx.fillStyle = `rgba(255, 255, 255, ${1 - t / 120})`;
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            return;
-        }
-        
-        let grad = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-        grad.addColorStop(0, "#2c3e50");
-        grad.addColorStop(0.5, "#d35400");
-        grad.addColorStop(1, "#f1c40f");
-        this.ctx.fillStyle = grad;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        this.ctx.fillStyle = "yellow";
-        this.ctx.beginPath();
-        this.ctx.arc(this.canvas.width / 2, this.canvas.height - 180, 80, 0, Math.PI * 2);
-        this.ctx.fill();
-        
-        this.ctx.fillStyle = "#2980b9";
-        this.ctx.fillRect(0, this.canvas.height - 180, this.canvas.width, 100);
-        
-        this.ctx.fillStyle = "#e67e22";
-        let sandY = this.canvas.height - 80;
-        this.ctx.fillRect(0, sandY, this.canvas.width, 80);
-        
-        let cx = this.canvas.width / 2;
-        let charY = this.canvas.height - 40;
-        
-        // Машина
-        const carImg = Assets.images.car;
-        if (carImg && carImg.complete && carImg.naturalWidth > 0) {
-            this.ctx.drawImage(carImg, cx - 200, sandY - 20, 200, 100);
-        } else {
-            this.ctx.fillStyle = '#34495e';
-            this.ctx.fillRect(cx - 200, sandY - 20, 200, 100);
-            this.ctx.fillStyle = '#95a5a6';
-            this.ctx.fillRect(cx - 170, sandY - 10, 40, 40);
-            this.ctx.fillRect(cx - 100, sandY - 10, 40, 40);
-        }
-        
-        // Герои
-        const heroImg = Assets.images.hero;
-        const allyImg = Assets.images.ally;
-        
-        if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
-            this.ctx.drawImage(heroImg, cx + 20, charY - 80, 50, 50);
-        } else {
-            this.ctx.font = '50px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('😎', cx + 45, charY - 55);
-        }
-        
-        if (allyImg && allyImg.complete && allyImg.naturalWidth > 0) {
-            this.ctx.drawImage(allyImg, cx + 80, charY - 80, 50, 50);
-        } else {
-            this.ctx.font = '50px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('🤝', cx + 105, charY - 55);
-        }
-
-        // Телефоны в руках
-        const phoneImg = Assets.images.phone;
-        if (phoneImg && phoneImg.complete && phoneImg.naturalWidth > 0) {
-            this.ctx.drawImage(phoneImg, cx + 55, charY - 70, 15, 25);
-            this.ctx.drawImage(phoneImg, cx + 85, charY - 70, 15, 25);
-        } else {
-            this.ctx.font = '25px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('📱', cx + 55, charY - 45);
-            this.ctx.fillText('📱', cx + 85, charY - 45);
-        }
-
-        // Текст
-        this.ctx.fillStyle = "white";
-        this.ctx.shadowColor = "black";
-        this.ctx.shadowBlur = 4;
-        this.ctx.font = "20px Arial";
-        this.ctx.textAlign = "center";
-        
-        if (t > 150 && t < 400) {
-            this.ctx.fillText("*1049 достал два новых айфона 12 мини и передал один Уске*", cx, charY - 220);
-        }
-        if (t > 250) this.ctx.fillText("1049: Я знал, что ты справишься.", cx, charY - 190);
-        if (t > 400) this.ctx.fillText("У Yska69 есть его iPhone 12 Mini.", cx, charY - 160);
-        if (t > 550) {
-            this.ctx.font = "bold 60px Arial";
-            this.ctx.fillText("КОНЕЦ", cx, this.canvas.height / 2);
-        }
-    },
-    
-    updateHUD: function() {
-        if (!this.player) return;
-        
-        let hpStr = "❤️".repeat(Math.max(0, this.player.hp));
-        document.getElementById('hp-display').innerText = `HP: ${hpStr} (${this.player.hp}/${this.player.maxHp})`;
-        document.getElementById('score-display').innerText = "KILLS: " + this.score;
-        
-        if (this.currentAct === 3) {
-            document.getElementById('ammo-display').innerHTML = `BATTERY: <span style='color:${this.player.battery > 20 ? 'lime' : 'red'}'>${Math.floor(this.player.battery)}%</span>`;
-            if (this.boss) {
-                document.getElementById('boss-hp').style.width = (this.boss.hp / this.boss.maxHp * 100) + "%";
-            }
+            document.getElementById('boss-hp').style.width = (this.boss.hp / this.boss.maxHp * 100) + "%";
         }
     },
     
@@ -1819,20 +1927,360 @@ const Game = {
     },
     
     gameOver: function() {
+        if (this.bossDefeated) return;
+        
         this.state = 'GAMEOVER';
         
         const msg = document.createElement('div');
         msg.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:30px;background:rgba(231,76,60,0.95);color:white;font-size:30px;border-radius:15px;z-index:1000;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.5);';
-        msg.innerHTML = "💀 ВЫ ПРОИГРАЛИ 💀<br><small style='font-size:18px;'>Обновите страницу для перезапуска</small>";
+        msg.innerHTML = `ПРОИГРЫШ. Mini не выжил.<br>KILLS: ${this.score}`;
         document.body.appendChild(msg);
         
-        setTimeout(() => location.reload(), 3000);
+        setTimeout(() => window.location.reload(), 3000);
+    },
+    
+    startEpilogue: function() {
+        this.state = 'EPILOGUE';
+        document.getElementById('ui-layer').style.display = 'none';
+    },
+
+    draw: function() {
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.ctx.fillStyle = '#111';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        if (this.state === 'MENU') {
+            this.drawGrid();
+            return;
+        }
+        
+        if (this.state === 'EPILOGUE') {
+            this.drawEpilogue();
+            return;
+        }
+        
+        this.cam.apply(this.ctx, this.canvas.width, this.canvas.height, this.mobileZoomFactor);
+
+        if (this.currentAct === 1) {
+            this.drawMatrixBg();
+        } else if (this.currentAct === 2) {
+            this.drawMallFloor();
+        } else if (this.currentAct === 3) {
+            this.drawOfficeBg();
+        } else {
+            this.drawGrid();
+        }
+
+        this.ctx.fillStyle = '#444';
+        this.walls.forEach(w => {
+            this.ctx.fillRect(w.x, w.y, w.w, w.h);
+            this.ctx.strokeStyle = '#666';
+            this.ctx.strokeRect(w.x, w.y, w.w, w.h);
+        });
+
+        this.props.forEach(p => {
+            this.ctx.save();
+            this.ctx.translate(p.x, p.y);
+            
+            if (p.type === 'DNS_STORE') {
+                this.ctx.fillStyle = '#f39c12';
+                this.ctx.fillRect(-150, -150, 300, 300);
+                this.ctx.fillStyle = '#2c3e50';
+                this.ctx.fillRect(-140, -140, 280, 280);
+                const dnsLogo = Assets.images.dns_logo;
+                if (dnsLogo && dnsLogo.complete && dnsLogo.naturalWidth > 0) {
+                    this.ctx.drawImage(dnsLogo, -80, -80, 160, 160);
+                } else {
+                    this.ctx.font = '80px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillStyle = 'white';
+                    this.ctx.fillText('DNS', 0, 0);
+                }
+            } else if (p.type === 'SCOOTER') {
+                const scooterImg = Assets.images.scooter;
+                if (scooterImg && scooterImg.complete && scooterImg.naturalWidth > 0) {
+                    this.ctx.drawImage(scooterImg, -50, -50, 100, 100);
+                } else {
+                    this.ctx.font = '50px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText('🛴', 0, 0);
+                }
+            } else if (p.type === 'CAR') {
+                const carImg = Assets.images.car;
+                 if (carImg && carImg.complete && carImg.naturalWidth > 0) {
+                    this.ctx.drawImage(carImg, -100, -50, 200, 100);
+                } else {
+                    this.ctx.font = '50px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText('🚗', 0, 0);
+                }
+            }
+            this.ctx.restore();
+        });
+
+        this.buffs.forEach(b => b.draw(this.ctx));
+        this.pickups.forEach(p => p.draw(this.ctx));
+        this.bullets.forEach(b => b.draw(this.ctx));
+        this.enemies.forEach(e => {
+            this.ctx.save();
+            this.ctx.translate(e.x, e.y);
+            
+            // HP Bar
+            this.ctx.fillStyle = '#333';
+            this.ctx.fillRect(-30, -50, 60, 5);
+            this.ctx.fillStyle = '#e74c3c';
+            this.ctx.fillRect(-30, -50, (e.hp / 3) * 60, 5);
+            
+            const img = e.img;
+            if (img && img.complete && img.naturalWidth > 0) {
+                this.ctx.drawImage(img, -e.size, -e.size, e.size * 2, e.size * 2);
+            } else {
+                e.draw(this.ctx, '#e74c3c');
+                this.ctx.font = '30px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('🤡', 0, 10);
+            }
+            this.ctx.restore();
+        });
+
+        if (this.boss) {
+            this.ctx.save();
+            this.ctx.translate(this.boss.x, this.boss.y);
+            this.ctx.shadowBlur = 30;
+            this.ctx.shadowColor = this.boss.isEnraged ? '#e74c3c' : '#3498db';
+
+            const img = Assets.images.tim;
+            if (img && img.complete && img.naturalWidth > 0) {
+                let w = this.boss.size * 2.5;
+                let h = (img.height / img.width) * w;
+                if (this.boss.isEnraged) {
+                    this.ctx.filter = 'sepia(100%) saturate(300%) hue-rotate(-50deg)';
+                }
+                this.ctx.drawImage(img, -w/2, -h/2, w, h);
+                this.ctx.filter = 'none';
+            } else {
+                this.boss.draw(this.ctx, this.boss.isEnraged ? '#e74c3c' : 'gray');
+                this.ctx.font = '100px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('🍎', 0, 35);
+            }
+
+            this.ctx.shadowBlur = 0;
+            this.ctx.restore();
+        }
+
+        if (this.player) {
+            this.ctx.save();
+            this.ctx.translate(this.player.x, this.player.y);
+            
+            // Мигание неуязвимости
+            if ((this.player.invuln > 0 || this.player.shieldBuffTimer > 0) && Math.floor(Date.now() / 100) % 2 === 0) {
+                this.ctx.globalAlpha = 0.5;
+            }
+            
+            // Щит визуально
+            if (this.player.shieldBuffTimer > 0) {
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, this.player.size + 15, 0, Math.PI*2);
+                this.ctx.strokeStyle = '#3498db';
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+            }
+
+            const heroImg = Assets.images.hero;
+            if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
+                this.ctx.rotate(this.player.aimAngle + Math.PI / 2); // Поворот
+                let w = this.player.size * 2.5;
+                let h = (heroImg.height / heroImg.width) * w;
+                this.ctx.drawImage(heroImg, -w/2, -h/2, w, h);
+            } else {
+                this.player.draw(this.ctx, '#3498db');
+                this.ctx.font = '30px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('🙂', 0, 10);
+            }
+
+            // Визуализация ближнего боя
+            if (this.player.swingTimer > 0 && this.currentAct === 2 && this.flags.hasDnsPhone) {
+                this.ctx.rotate(-(this.player.aimAngle + Math.PI / 2)); // Сброс поворота игрока
+                
+                this.ctx.save();
+                this.ctx.rotate(this.player.aimAngle);
+                
+                // Рисуем дугу атаки
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, 110, -0.6, 0.6);
+                this.ctx.lineTo(0, 0);
+                this.ctx.fillStyle = 'rgba(241, 196, 15, 0.4)';
+                this.ctx.fill();
+
+                // Рисуем "телефон"
+                this.ctx.fillStyle = '#f1c40f';
+                this.ctx.fillRect(40, -5, 50, 10); 
+                
+                this.ctx.restore();
+            }
+
+            // Визуализация телефона (только Act 3, для красоты)
+            if (this.currentAct === 3) {
+                this.ctx.rotate(-(this.player.aimAngle + Math.PI / 2)); 
+                const phoneImg = Assets.images.phone;
+                if (phoneImg && phoneImg.complete && phoneImg.naturalWidth > 0) {
+                    this.ctx.drawImage(phoneImg, 25, -10, 15, 25);
+                } else {
+                     this.ctx.font = '25px Arial';
+                     this.ctx.textAlign = 'center';
+                     this.ctx.fillText('📱', 30, 10);
+                }
+            }
+
+            this.ctx.globalAlpha = 1;
+            this.ctx.restore();
+        }
+
+        this.particles.forEach(p => p.draw(this.ctx));
+        
+        // ВАЖНО: обновляем HUD после всего, чтобы видеть актуальное состояние
+        this.updateHUD();
+    },
+
+    drawMatrixBg: function() {
+        this.ctx.fillStyle = '#0f0';
+        let tileSize = 50;
+        let min = Math.floor((this.cam.x - this.canvas.width / 2) / tileSize) * tileSize;
+        let max = min + this.canvas.width + 2 * tileSize;
+        
+        for (let x = min; x < max; x += tileSize) {
+            for (let y = -2000; y < 2000; y += tileSize) {
+                this.ctx.font = '16px monospace';
+                this.ctx.globalAlpha = 0.15;
+                this.ctx.fillText(Math.floor(Math.random() * 9), x, y);
+            }
+        }
+        this.ctx.globalAlpha = 1;
+        this.ctx.fillStyle = '#111';
+        this.ctx.fillRect(-500, -500, 1000, 1000);
+    },
+
+    drawMallFloor: function() {
+        const tileSize = 200;
+        const size = 1200;
+        const min = -600;
+        
+        for (let x = min; x < min + size; x += tileSize) {
+            for (let y = min; y < min + size; y += tileSize) {
+                this.ctx.fillStyle = ((Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2 === 0) ? '#4a4a4a' : '#6b6b6b';
+                this.ctx.fillRect(x, y, tileSize, tileSize);
+            }
+        }
+    },
+
+    drawOfficeBg: function() {
+        const officeImg = Assets.images.office;
+        if (officeImg && officeImg.complete && officeImg.naturalWidth > 0) {
+            this.ctx.drawImage(officeImg, -1000, -1000, 2000, 2000);
+        } else {
+            this.ctx.fillStyle = '#2c3e50';
+            this.ctx.fillRect(-1500, -1500, 3000, 3000);
+        }
+    },
+
+    drawGrid: function() {
+        this.ctx.strokeStyle = '#222';
+        this.ctx.lineWidth = 2;
+        let sz = 100;
+        this.ctx.beginPath();
+        for (let x = -2000; x < 2000; x += sz) {
+            this.ctx.moveTo(x, -2000);
+            this.ctx.lineTo(x, 2000);
+        }
+        for (let y = -2000; y < 2000; y += sz) {
+            this.ctx.moveTo(-2000, y);
+            this.ctx.lineTo(2000, y);
+        }
+        this.ctx.stroke();
+    },
+
+    epilogueTimer: 0,
+    drawEpilogue: function() {
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.epilogueTimer++;
+        let t = this.epilogueTimer;
+
+        if (t < 60) {
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${t / 60})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        } else if (t < 120) {
+            this.ctx.fillStyle = 'white';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        } else {
+            this.ctx.fillStyle = 'black';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+        
+        if (t > 120) {
+            let cx = this.canvas.width / 2;
+            let cy = this.canvas.height / 2;
+            
+            // Финальная сцена
+            this.ctx.fillStyle = 'white';
+            this.ctx.textAlign = 'center';
+            
+            const rollSpeed = 1.5;
+            let charY = cy + 300 - (t - 120) * rollSpeed;
+            
+            this.ctx.font = '40px sans-serif';
+            this.ctx.fillText("ФИНАЛ", cx, charY - 100);
+
+            this.ctx.font = '24px sans-serif';
+            this.ctx.fillText("YSKA69 сохранил компактность.", cx, charY + 50);
+            this.ctx.fillText("12 Mini остался последним оплотом.", cx, charY + 80);
+            this.ctx.fillText("Но это только начало борьбы с инновациями.", cx, charY + 110);
+            
+            this.ctx.font = '18px sans-serif';
+            this.ctx.fillStyle = '#aaa';
+            this.ctx.fillText("Спасибо за игру!", cx, charY + 200);
+            
+            // Герои
+            this.ctx.fillStyle = '#3498db';
+            const heroImg = Assets.images.hero;
+            const allyImg = Assets.images.ally;
+            
+            if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
+                this.ctx.drawImage(heroImg, cx - 100, charY - 80, 50, 50);
+            } else {
+                this.ctx.font = '50px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('😎', cx - 75, charY - 55);
+            }
+
+            if (allyImg && allyImg.complete && allyImg.naturalWidth > 0) {
+                this.ctx.drawImage(allyImg, cx + 80, charY - 80, 50, 50);
+            } else {
+                this.ctx.font = '50px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('🤝', cx + 105, charY - 55);
+            }
+            
+            const phoneImg = Assets.images.phone;
+            if (phoneImg && phoneImg.complete && phoneImg.naturalWidth > 0) {
+                 this.ctx.drawImage(phoneImg, cx + 55, charY - 70, 15, 25);
+                 this.ctx.drawImage(phoneImg, cx + 85, charY - 70, 15, 25);
+            } else {
+                this.ctx.font = '25px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('📱', cx + 60, charY - 55);
+                this.ctx.fillText('📱', cx + 90, charY - 55);
+            }
+        }
     }
 };
 
-window.onload = function() {
-    Game.init();
-}
+window.onload = () => Game.init();
 </script>
+
 </body>
 </html>
